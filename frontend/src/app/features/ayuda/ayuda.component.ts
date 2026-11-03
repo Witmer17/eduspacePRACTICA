@@ -7,7 +7,7 @@ interface Guia { roles: string[]; titulo: string; pasos: string[]; ruta?: string
 
 const GUIAS: Guia[] = [
   { roles: ['ADMIN'], titulo: 'Crear y restaurar cuentas de acceso', ruta: '/cuentas', enlace: 'Cuentas de acceso',
-    pasos: ['En Avisos y cuentas → Cuentas de acceso elige Alumnos, Docentes o Apoderados.', 'Pulsa «Crear cuenta» (o «Crear N cuentas faltantes»): el usuario es nombre.apellido y la clave inicial es el DNI.', 'Si alguien olvidó su clave, pulsa «Restaurar»: vuelve a ser su DNI y deberá cambiarla al entrar.'] },
+    pasos: ['En Personal → Cuentas de acceso elige Alumnos, Docentes o Apoderados.', 'Pulsa «Crear cuenta» (o «Crear N cuentas faltantes»): el usuario es nombre.apellido y la clave inicial es el DNI.', 'Si alguien olvidó su clave, pulsa «Restaurar»: vuelve a ser su DNI y deberá cambiarla al entrar.'] },
   { roles: ['ADMIN', 'SECRETARIA'], titulo: 'Matricular a un alumno', ruta: '/matriculas?nueva=1', enlace: 'Nueva matrícula',
     pasos: ['Registra al alumno y su apoderado en Alumnos (o impórtalos desde un CSV).', 'Sube y verifica sus documentos: DNI, partida de nacimiento y ficha SIAGIE.', 'Comprueba que haya una campaña abierta y vacantes en la sección.', 'Crea la matrícula: queda en pre-matrícula hasta que se pague.'] },
   { roles: ['ADMIN', 'SECRETARIA'], titulo: 'Armar y publicar un horario', ruta: '/planificacion/horarios', enlace: 'Ir a horarios',

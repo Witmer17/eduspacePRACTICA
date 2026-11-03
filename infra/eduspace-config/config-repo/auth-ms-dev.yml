@@ -13,6 +13,16 @@ app:
     refresh-token-dias: 7
     jwt:
       generar-clave-si-falta: true     # DEV: par RSA nuevo en cada arranque (los tokens no sobreviven al reinicio)
+    # Las cuentas y roles que se administran en EduSpace se reflejan en Keycloak. Se activa solo si hay secreto:
+    #   KEYCLOAK_ADMIN_SECRET=... (el mismo con el que se ejecutó infra/keycloak/crear-cliente-admin.sh)
+    keycloak-admin:
+      aceptar-tokens: true             # el frontend en modo Keycloak llama a auth-ms con tokens de Keycloak
+      enabled: ${KEYCLOAK_ADMIN_ENABLED:false}
+      base-url: ${KEYCLOAK_URL:http://localhost:18090}
+      realm: eduspace
+      client-id: eduspace-admin
+      client-secret: ${KEYCLOAK_ADMIN_SECRET:}
+      exigir-cambio-clave: ${KEYCLOAK_EXIGIR_CAMBIO_CLAVE:false}   # false con authMode=keycloak-form (direct grant no admite acciones requeridas)
 eureka:
   client:
     registry-fetch-interval-seconds: 5

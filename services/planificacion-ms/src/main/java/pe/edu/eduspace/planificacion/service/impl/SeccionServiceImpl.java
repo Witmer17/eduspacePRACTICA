@@ -98,6 +98,9 @@ public class SeccionServiceImpl implements SeccionService {
             if (tutor.getEstado() != EstadoDocente.ACTIVO) {
                 throw new BusinessRuleException("El tutor debe ser un docente ACTIVO");
             }
+            if (!tutor.esDocente()) {
+                throw new BusinessRuleException("El tutor debe pertenecer al área Docencia");
+            }
         }
         Turno turno = r.turno() == null ? Turno.MANANA : r.turno();
         if (id != null && seccion.getTurno() != turno && horarioHaySobre(id)) {

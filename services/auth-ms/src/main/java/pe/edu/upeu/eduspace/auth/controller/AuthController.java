@@ -40,11 +40,21 @@ public class AuthController {
     }
 
     @PostMapping("/cambiar-clave")
-    @Operation(summary = "Cambiar la propia clave; cierra las demás sesiones")
+    @Operation(summary = "Cambiar la propia clave (también en Keycloak); cierra las demás sesiones")
     public ResponseEntity<Void> cambiarClave(@Valid @RequestBody CambiarClaveRequest req, @AuthenticationPrincipal Jwt jwt) {
+        service.cambiarClave(usuarioId(jwt), req.claveActual(), req.claveNueva());
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/estado-clave")
+    @Operation(summary = "¿La persona de la sesión debe cambiar su clave antes de continuar?")
+    public EstadoClaveResponse estadoClave(@AuthenticationPrincipal Jwt jwt) {
+        return new EstadoClaveResponse(service.debeCambiarClave(usuarioId(jwt)));
+    }
+
+    private static long usuarioId(Jwt jwt) {
         Object id = jwt.getClaim("usuarioId");
         if (!(id instanceof Number n)) throw new AccessDeniedException("El token no contiene usuarioId.");
-        service.cambiarClave(n.longValue(), req.claveActual(), req.claveNueva());
-        return ResponseEntity.noContent().build();
+        return n.longValue();
     }
 }

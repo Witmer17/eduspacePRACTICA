@@ -22,6 +22,10 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     List<Pago> findByCajaSesionId(Long cajaSesionId);
 
+    /** Todo lo cobrado y no anulado: el dinero que entró a caja. */
+    @Query("SELECT COALESCE(SUM(p.montoTotal), 0) FROM Pago p WHERE p.estado = 'CONFIRMADO'")
+    BigDecimal totalCobrado();
+
     @Query("SELECT COALESCE(SUM(p.montoTotal), 0) FROM Pago p WHERE p.cajaSesion.id = :cajaId AND p.estado = 'CONFIRMADO'")
     BigDecimal sumTotalByCajaSesionId(@Param("cajaId") Long cajaId);
 

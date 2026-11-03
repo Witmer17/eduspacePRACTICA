@@ -1,9 +1,62 @@
 <div class="page">
   <app-page-header
     [titulo]="saludo() + ', ' + (nombre()?.username ?? '')"
-    [subtitulo]="datos().anio ? 'Año académico ' + datos().anio!.nombre + ' · resumen de hoy' : 'No hay un año académico activo'"
+    [subtitulo]="!mostrarPanel ? 'Resumen institucional del personal por áreas' : datos().anio ? 'Año académico ' + datos().anio!.nombre + ' · resumen de hoy' : 'No hay un año académico activo'"
   />
 
+  <!-- Card de Personal por áreas -->
+  <section class="card card-personal" aria-labelledby="t-personal">
+    <div class="card-body">
+      <div class="personal-cab">
+        <div class="personal-tit">
+          <div class="personal-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div>
+            <h2 id="t-personal" class="sec-titulo" style="margin: 0">Personal por áreas</h2>
+            <p class="muted" style="margin: 2px 0 0">Distribución de integrantes del equipo escolar por cada área de trabajo</p>
+          </div>
+        </div>
+
+        <div class="personal-acciones">
+          <div class="total-badge">
+            <span class="total-valor">{{ cargandoPersonal() ? '…' : totalPersonal() }}</span>
+            <span class="total-texto">{{ totalPersonal() === 1 ? 'persona registrada' : 'personas registradas' }}</span>
+          </div>
+          <a class="btn btn-sm btn-primary" routerLink="/personal">Ver todo el personal →</a>
+        </div>
+      </div>
+
+      @if (cargandoPersonal()) {
+        <p class="muted" style="margin: 0">Cargando personal por áreas…</p>
+      } @else if (areas().length === 0) {
+        <p class="muted" style="margin: 0">No se encontraron áreas activas en el colegio.</p>
+      } @else {
+        <div class="areas-grid">
+          @for (a of conteoPorArea(); track a.id) {
+            <a class="area-item" [routerLink]="'/personal'" [queryParams]="{ areaId: a.id }" [class.con-gente]="a.cantidad > 0" [title]="'Ver personal de ' + a.nombre">
+              <div class="area-item-header">
+                <span class="area-nombre">{{ a.nombre }}</span>
+                <span [class]="'badge ' + (a.cantidad > 0 ? 'badge-ok' : 'badge-gray')">
+                  {{ a.cantidad }} {{ a.cantidad === 1 ? 'persona' : 'personas' }}
+                </span>
+              </div>
+              @if (a.descripcion) {
+                <p class="area-desc">{{ a.descripcion }}</p>
+              }
+            </a>
+          }
+        </div>
+      }
+    </div>
+  </section>
+
+  @if (mostrarPanel) {
   <!-- 1. Lo que necesita atención -->
   <div class="atencion-barra">
     <button type="button" class="campana" [class.activa]="verAtencion()" (click)="verAtencion.set(!verAtencion())"
@@ -188,4 +241,5 @@
       </div>
     </section>
   </div>
+  }
 </div>

@@ -17,6 +17,7 @@ function configurar(): { auth: AuthService; http: HttpTestingController } {
 }
 
 const TOKEN = '/kc/realms/eduspace/protocol/openid-connect/token';
+const ESTADO_CLAVE = '/api/v1/auth/estado-clave';
 const tokens = (roles: string[]) => ({ access_token: jwtFalso(roles), refresh_token: 'kc-refresh', token_type: 'Bearer', expires_in: 300 });
 
 describe('AuthService · keycloak-form (formulario de EduSpace validado por Keycloak)', () => {
@@ -35,16 +36,32 @@ describe('AuthService · keycloak-form (formulario de EduSpace validado por Keyc
     expect(cuerpo.get('client_id')).toBe('eduspace-web-form');
     expect(cuerpo.get('username')).toBe('admin');
     req.flush(tokens(['ADMIN']));
+    http.expectOne(ESTADO_CLAVE).flush({ debeCambiarClave: false });
 
     expect(auth.isAuthenticated()).toBe(true);
     expect(auth.isAdmin()).toBe(true);
     expect(auth.debeCambiarClave()).toBe(false);
   });
 
+  it('si auth-ms indica clave temporal, obliga a cambiarla y lo conserva al renovar el token', () => {
+    const { auth, http } = configurar();
+    let debe: boolean | undefined;
+    auth.login({ username: 'maria.perez', password: '12345678' }).subscribe(r => (debe = r.debe_cambiar_clave));
+    http.expectOne(TOKEN).flush(tokens(['ALUMNO']));
+    http.expectOne(ESTADO_CLAVE).flush({ debeCambiarClave: true });
+    expect(debe).toBe(true);
+    expect(auth.debeCambiarClave()).toBe(true);
+
+    auth.renovar().subscribe();
+    http.expectOne(TOKEN).flush({ ...tokens(['ALUMNO']), refresh_token: 'kc-refresh-2' });
+    expect(auth.debeCambiarClave()).toBe(true);
+  });
+
   it('renueva con el refresh token de Keycloak y cierra sesión contra Keycloak', () => {
     const { auth, http } = configurar();
     auth.login({ username: 'u', password: 'p' }).subscribe();
     http.expectOne(TOKEN).flush(tokens(['DOCENTE']));
+    http.expectOne(ESTADO_CLAVE).flush({ debeCambiarClave: false });
 
     auth.renovar().subscribe();
     const ref = http.expectOne(TOKEN);

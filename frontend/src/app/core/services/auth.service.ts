@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, catchError, finalize, from, map, of, shareReplay, tap, throwError } from 'rxjs';
+import { Observable, catchError, finalize, from, map, of, shareReplay, switchMap, tap, throwError } from 'rxjs';
 import { APP_CONFIG } from '../config/app-config';
 import {
   CambiarClaveRequest,
@@ -11,6 +11,19 @@ import {
   TokenResponse
 } from '../models/auth.model';
 import { KeycloakService } from './keycloak.service';
+
+/** Los únicos roles que usa el sistema. */
+export const ROLES_SISTEMA = ['ADMIN', 'SECRETARIA', 'DOCENTE', 'APODERADO', 'ALUMNO', 'CAJERO'] as const;
+
+/**
+ * Se queda solo con los roles del sistema. Con Keycloak, las cuentas creadas desde la aplicación traen además roles propios del servidor
+ * (`default-roles-eduspace`, `offline_access`, `uma_authorization`): sin este filtro, reglas como «solo tiene roles del personal»
+ * (que decide la barra superior) fallaban para esas cuentas y la secretaría veía el menú lateral en vez de su barra.
+ */
+export function rolesDelSistema(roles: readonly string[] | null | undefined): string[] {
+  const conocidos: readonly string[] = ROLES_SISTEMA;
+  return (roles ?? []).filter(r => conocidos.includes(r));
+}
 
 const TOKEN_KEY = 'eduspace_token';
 const REFRESH_KEY = 'eduspace_refresh';
@@ -75,7 +88,18 @@ export class AuthService {
         .set('username', request.username).set('password', request.password);
       return this.http.post<KeycloakTokens>(this.urlKeycloak('token'), cuerpo.toString(), { headers: FORM }).pipe(
         map(r => this.aTokenResponse(r)),
-        tap(res => this.guardarSesion(res))
+        tap(res => this.guardarSesion(res)),
+        // Keycloak no sabe si la clave es temporal: auth-ms lo indica (con el token ya guardado, el interceptor lo adjunta).
+        switchMap(res =>
+          this.http.get<{ debeCambiarClave: boolean }>(`${API}/estado-clave`).pipe(
+            map(e => {
+              const final = { ...res, debe_cambiar_clave: !!e.debeCambiarClave };
+              if (final.debe_cambiar_clave) this.guardarSesion(final);
+              return final;
+            }),
+            catchError(() => of(res))
+          )
+        )
       );
     }
     return this.http.post<TokenResponse>(`${API}/login`, request).pipe(tap(res => this.guardarSesion(res)));
@@ -105,7 +129,7 @@ export class AuthService {
       const refrescoKeycloak$ = (): Observable<unknown> => {
         const cuerpo = new HttpParams().set('grant_type', 'refresh_token').set('client_id', this.clienteFormulario()).set('refresh_token', this.refreshSignal() ?? '');
         return this.http.post<KeycloakTokens>(this.urlKeycloak('token'), cuerpo.toString(), { headers: FORM }).pipe(
-          map(r => this.aTokenResponse(r)),
+          map(r => this.aTokenResponse(r, this.cambiarClaveSignal())), // al renovar se conserva «debe cambiar la clave»
           tap(res => this.guardarSesion(res))
         );
       };
@@ -167,13 +191,16 @@ export class AuthService {
     this.router.navigate(['/login'], Object.keys(queryParams).length ? { queryParams } : undefined);
   }
 
-  /** Abre la consola de la cuenta (Keycloak) donde el usuario cambia su clave y gestiona sus sesiones. */
+  /**
+   * Cambiar la clave: con el formulario propio (y con login propio) se usa la pantalla de EduSpace, que actualiza la clave en
+   * Keycloak a través de auth-ms; solo con la redirección a Keycloak (PKCE) se abre la consola de su cuenta.
+   */
   abrirCuenta(): void {
-    if (this.conFormulario) {
-      window.open(`${location.protocol}//${location.hostname}:18090/realms/${this.cfg.keycloak.realm}/account`, '_blank', 'noopener');
+    if (this.usaRedirect) {
+      void this.kc.cuenta();
       return;
     }
-    void this.kc.cuenta();
+    void this.router.navigate(['/cambiar-clave']);
   }
 
   get consolaAdminUrl(): string {
@@ -203,8 +230,8 @@ export class AuthService {
     return `${url.replace(/\/$/, '')}/realms/${realm}/protocol/openid-connect/${operacion}`;
   }
 
-  private aTokenResponse(r: KeycloakTokens): TokenResponse {
-    return { access_token: r.access_token, refresh_token: r.refresh_token, token_type: r.token_type ?? 'Bearer', expires_in: r.expires_in, debe_cambiar_clave: false };
+  private aTokenResponse(r: KeycloakTokens, debeCambiarClave = false): TokenResponse {
+    return { access_token: r.access_token, refresh_token: r.refresh_token, token_type: r.token_type ?? 'Bearer', expires_in: r.expires_in, debe_cambiar_clave: debeCambiarClave };
   }
 
   private sincronizarKeycloak(): void {
@@ -273,7 +300,7 @@ export class AuthService {
         id: Number(claims.usuarioId ?? claims.sub),
         username: claims.preferred_username ?? '',
         email: claims.email ?? '',
-        roles: claims.realm_access?.roles ?? []
+        roles: rolesDelSistema(claims.realm_access?.roles)
       };
     } catch {
       return null;

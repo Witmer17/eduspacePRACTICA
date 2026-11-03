@@ -30,6 +30,7 @@ public class AuthService {
     private final JwtService jwt;
     private final RefreshTokenService refresh;
     private final AuthProperties props;
+    private final KeycloakAdminClient keycloak;
 
     /** Los intentos fallidos se persisten aunque se lance la excepción. */
     @Transactional(noRollbackFor = {CredencialesInvalidasException.class, UsuarioBloqueadoException.class})
@@ -71,11 +72,13 @@ public class AuthService {
     @Transactional
     public void cambiarClave(Long usuarioId, String actual, String nueva) {
         Usuario u = usuarios.findById(usuarioId).orElseThrow(() -> new CredencialesInvalidasException("Sesión inválida."));
-        if (!encoder.matches(actual, u.getPasswordHash())) {
+        // Con Keycloak la clave vigente es la de Keycloak (el hash local puede estar desfasado): se comprueba allí.
+        boolean actualCorrecta = keycloak.habilitado() ? keycloak.verificarClave(u.getUsername(), actual) : encoder.matches(actual, u.getPasswordHash());
+        if (!actualCorrecta) {
             throw new BusinessRuleException("La clave actual es incorrecta.");
         }
         validarClave(nueva);
-        if (encoder.matches(nueva, u.getPasswordHash())) {
+        if (actual.equals(nueva)) {
             throw new BusinessRuleException("La clave nueva debe ser distinta de la actual.");
         }
         u.setPasswordHash(encoder.encode(nueva));
@@ -83,6 +86,13 @@ public class AuthService {
         u.setActualizadoEn(LocalDateTime.now());
         usuarios.save(u);
         refresh.revocarTodos(usuarioId);        // cierra las demás sesiones
+        keycloak.restablecerClave(u, nueva);    // clave definitiva (no temporal) en Keycloak y cierre de sus sesiones
+    }
+
+    /** Indica si la persona debe cambiar su clave antes de usar el sistema (clave temporal o inicial). */
+    @Transactional(readOnly = true)
+    public boolean debeCambiarClave(Long usuarioId) {
+        return usuarios.findById(usuarioId).map(u -> Boolean.TRUE.equals(u.getDebeCambiarClave())).orElse(false);
     }
 
     void validarClave(String clave) {

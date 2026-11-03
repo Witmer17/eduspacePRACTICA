@@ -22,6 +22,8 @@ export const NAV_AULA: EnlaceAula[] = [
   { etiqueta: 'Asistencia', ruta: '/docente/asistencia', icono: 'M9 12l2 2 4-4M21 12a9 9 0 11-18 0 9 9 0 0118 0', roles: DOCENTE, prefijos: ['/docente/asistencia'] },
   { etiqueta: 'Exámenes', ruta: '/docente/examenes', icono: 'M5 4h14v16H5zM9 9h6M9 13h6M9 17h3', roles: DOCENTE, prefijos: ['/docente/examenes', '/docente/banco'] },
   { etiqueta: 'Notas', ruta: '/docente/notas', icono: 'M3 20h18M6 20V10M12 20V4M18 20v-7', roles: DOCENTE, prefijos: ['/docente/notas'] },
+  // Su contrato, asistencia, pagos y cuenta de depósito (lo que la administración registra de él).
+  { etiqueta: 'Mi trabajo', ruta: '/mi-trabajo', icono: 'M3 7h18v13H3zM8 7V4h8v3M3 13h18', roles: DOCENTE, prefijos: ['/mi-trabajo'] },
 
   { etiqueta: 'Mis cursos', ruta: '/familia/inicio', icono: 'M3 11l9-8 9 8M5 10v10h14V10', roles: FAMILIA, prefijos: ['/familia/inicio', '/familia/curso', '/familia/tareas', '/familia/examenes'] },
   { etiqueta: 'Horario', ruta: '/familia/horario', icono: 'M4 5h16v15H4zM4 10h16M10 5v15', roles: FAMILIA, prefijos: ['/familia/horario'] },

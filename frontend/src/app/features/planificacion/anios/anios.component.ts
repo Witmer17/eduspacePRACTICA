@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Observable } from 'rxjs';
+import { Observable, forkJoin, of } from 'rxjs';
 import { Anio, EstadoPlan, Periodo } from '../../../core/models/planificacion.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmService } from '../../../core/services/confirm.service';
@@ -10,8 +10,9 @@ import { PlanificacionService } from '../../../core/services/planificacion.servi
 import { mensajeError } from '../../../core/utils/errores';
 import { ModalComponent } from '../../../shared/components/modal/modal.component';
 import { PageHeaderComponent } from '../../../shared/components/page-header/page-header.component';
+import { REGIMENES, Regimen, proponerPeriodos } from './regimen-periodos';
 
-type Dialogo = 'ninguno' | 'anio' | 'periodo';
+type Dialogo = 'ninguno' | 'anio' | 'periodo' | 'regimen';
 
 const CLASE_ESTADO: Record<EstadoPlan, string> = { PLANIFICADO: 'badge-warn', ACTIVO: 'badge-ok', CERRADO: 'badge-gray' };
 const SIGUIENTE: Record<EstadoPlan, EstadoPlan | null> = { PLANIFICADO: 'ACTIVO', ACTIVO: 'CERRADO', CERRADO: null };
@@ -19,7 +20,16 @@ const SIGUIENTE: Record<EstadoPlan, EstadoPlan | null> = { PLANIFICADO: 'ACTIVO'
 @Component({
   selector: 'app-anios',
   imports: [ReactiveFormsModule, DatePipe, ModalComponent, PageHeaderComponent],
-  templateUrl: './anios.component.html'
+  templateUrl: './anios.component.html',
+  styles: `
+    .regimenes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .regimen { display: flex; flex-direction: column; gap: 3px; padding: 14px; text-align: left; border: 1.5px solid var(--line-2); border-radius: 14px; background: var(--card); cursor: pointer; font: inherit; color: inherit; }
+    .regimen span { font-size: .78rem; color: var(--ink-2); }
+    .regimen:hover { border-color: var(--primary); }
+    .regimen.on { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+    .regimen:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    @media (max-width: 560px) { .regimenes { grid-template-columns: 1fr; } }
+  `
 })
 export class AniosComponent implements OnInit {
   private readonly api = inject(PlanificacionService);
@@ -51,8 +61,38 @@ export class AniosComponent implements OnInit {
     fechaFin: ['', Validators.required]
   });
 
+  // --- Régimen de periodos: bimestres, trimestres o semestres, con las fechas repartidas por todo el año ---
+  protected readonly regimenes = REGIMENES;
+  protected readonly regimen = signal<Regimen>('BIMESTRE');
+  protected readonly propuesta = computed(() => {
+    const a = this.anioSel();
+    return a ? proponerPeriodos(this.regimen(), a.fechaInicio, a.fechaFin) : [];
+  });
+  /** Se pueden rehacer los periodos mientras ninguno haya empezado (todos PLANIFICADO). */
+  protected readonly sePuedeRedefinir = computed(() => this.periodos().every(p => p.estado === 'PLANIFICADO'));
+
   ngOnInit(): void {
     this.cargarAnios();
+  }
+
+  protected definirPeriodos(): void {
+    this.regimen.set(this.periodos().length === 3 ? 'TRIMESTRE' : this.periodos().length === 2 ? 'SEMESTRE' : 'BIMESTRE');
+    this.abrir('regimen', null);
+  }
+
+  protected crearPeriodosDelRegimen(): void {
+    const anio = this.anioSel();
+    const nuevos = this.propuesta();
+    if (!anio || nuevos.length === 0) return;
+    // Si ya había periodos (todos sin empezar), se reemplazan por los del régimen elegido.
+    const borrar = this.periodos().map(p => this.api.eliminarPeriodo(p.id));
+    this.ejecutar(borrar.length ? forkJoin(borrar) : of([] as void[]), () => {
+      this.ejecutar(forkJoin(nuevos.map(p => this.api.crearPeriodo({ anioId: anio.id, ...p }))), () => {
+        this.avisos.success(`Se crearon ${nuevos.length} periodos (${REGIMENES.find(r => r.id === this.regimen())!.etiqueta.toLowerCase()}).`);
+        this.cerrar();
+        this.seleccionar(anio);
+      });
+    });
   }
 
   protected clase(e: EstadoPlan): string {

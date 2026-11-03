@@ -340,6 +340,58 @@ class PlanificacionApiIntegrationTest extends PostgresIntegrationTestBase {
     }
 
     @Test
+    @Order(12)
+    void personal_porAreas_soloDocenciaDictaCursosYApareceComoDocente() throws Exception {
+        String areas = mvc.perform(get("/api/v1/planificacion/areas").with(admin())).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(14)).andReturn().getResponse().getContentAsString();
+        long tesoreriaId = ((Number) ((List<?>) JsonPath.read(areas, "$[?(@.codigo=='TESORERIA')].id")).get(0)).longValue();
+
+        String body = enviar("POST", "/api/v1/planificacion/docentes",
+                "{\"numeroDocumento\":\"41000111\",\"nombres\":\"Rosa\",\"apellidos\":\"Caja\",\"cargo\":\"Cajera\",\"areaId\":" + tesoreriaId + "}",
+                usuario(2L, "SECRETARIA")).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.areaCodigo").value("TESORERIA")).andExpect(jsonPath("$.cargo").value("Cajera"))
+                .andReturn().getResponse().getContentAsString();
+        long cajeraId = ((Number) JsonPath.read(body, "$.id")).longValue();
+
+        // los selectores de docente (sin parámetros) no la ven; el listado de personal sí
+        mvc.perform(get("/api/v1/planificacion/docentes").with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(2));
+        mvc.perform(get("/api/v1/planificacion/docentes?todas=true").with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(3));
+        mvc.perform(get("/api/v1/planificacion/docentes?areaId=" + tesoreriaId).with(admin()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.total").value(1)).andExpect(jsonPath("$.contenido[0].areaNombre").value("Tesorería y caja"));
+
+        // quien no es de Docencia no puede dictar un curso ni ser tutora
+        enviar("POST", "/api/v1/planificacion/asignaciones", "{\"seccionId\":" + seccionAId + ",\"cursoId\":" + cursoComId + ",\"docenteId\":" + cajeraId + "}", usuario(2L, "SECRETARIA"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensaje", containsString("área Docencia")));
+
+        // un área inexistente es 404; sin área se asume Docencia (compatibilidad con quien registra docentes sin indicarla)
+        enviar("POST", "/api/v1/planificacion/docentes", "{\"numeroDocumento\":\"41000222\",\"nombres\":\"Mal\",\"apellidos\":\"Area\",\"areaId\":999999}", admin())
+                .andExpect(status().isNotFound());
+        String sinArea = enviar("POST", "/api/v1/planificacion/docentes", "{\"numeroDocumento\":\"41000333\",\"nombres\":\"Sin\",\"apellidos\":\"Area\"}", admin())
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.areaCodigo").value("DOCENCIA")).andExpect(jsonPath("$.cursoIds.length()").value(0))
+                .andReturn().getResponse().getContentAsString();
+        long docenteNuevoId = ((Number) JsonPath.read(sinArea, "$.id")).longValue();
+
+        // los cursos que un docente puede dictar se eligen al contratarlo; sin especialidad escrita, se arma con sus nombres
+        enviar("PUT", "/api/v1/planificacion/docentes/" + docenteNuevoId,
+                "{\"numeroDocumento\":\"41000333\",\"nombres\":\"Sin\",\"apellidos\":\"Area\",\"cursoIds\":[" + cursoMatId + "," + cursoComId + "]}", admin())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.cursoIds.length()").value(2)).andExpect(jsonPath("$.cursoIds", hasItem((int) cursoMatId)))
+                .andExpect(jsonPath("$.especialidad").value("Comunicación, Matemática"));
+        // sin cursoIds no se tocan los que ya tiene; con una lista vacía se quitan
+        enviar("PUT", "/api/v1/planificacion/docentes/" + docenteNuevoId, "{\"numeroDocumento\":\"41000333\",\"nombres\":\"Sin\",\"apellidos\":\"Area\"}", admin())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.cursoIds.length()").value(2));
+        enviar("PUT", "/api/v1/planificacion/docentes/" + docenteNuevoId, "{\"numeroDocumento\":\"41000333\",\"nombres\":\"Sin\",\"apellidos\":\"Area\",\"cursoIds\":[]}", admin())
+                .andExpect(status().isOk()).andExpect(jsonPath("$.cursoIds.length()").value(0));
+        // un curso que no existe se rechaza, y el personal de otras áreas no dicta cursos
+        enviar("PUT", "/api/v1/planificacion/docentes/" + docenteNuevoId, "{\"numeroDocumento\":\"41000333\",\"nombres\":\"Sin\",\"apellidos\":\"Area\",\"cursoIds\":[999999]}", admin())
+                .andExpect(status().isConflict());
+        enviar("PUT", "/api/v1/planificacion/docentes/" + cajeraId,
+                "{\"numeroDocumento\":\"41000111\",\"nombres\":\"Rosa\",\"apellidos\":\"Caja\",\"areaId\":" + tesoreriaId + ",\"cursoIds\":[" + cursoMatId + "]}", admin())
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.mensaje", containsString("Docencia")));
+    }
+
+    @Test
     @Order(13)
     void anio_cerradoEsDeSoloLectura() throws Exception {
         mvc.perform(patch("/api/v1/planificacion/anios/" + anioId + "/cerrar").with(admin()))

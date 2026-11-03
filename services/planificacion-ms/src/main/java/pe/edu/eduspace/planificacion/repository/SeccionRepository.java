@@ -14,6 +14,8 @@ public interface SeccionRepository extends JpaRepository<Seccion, Long> {
             """)
     List<Seccion> buscar(@Param("anioId") Long anioId, @Param("gradoId") Long gradoId);
 
+    long countByGradoId(Long gradoId);
+
     boolean existsByAnioIdAndGradoIdAndNombre(Long anioId, Long gradoId, String nombre);
 
     boolean existsByAnioIdAndGradoIdAndNombreAndIdNot(Long anioId, Long gradoId, String nombre, Long id);
@@ -21,6 +23,9 @@ public interface SeccionRepository extends JpaRepository<Seccion, Long> {
     long countByAulaId(Long aulaId);
 
     long countByAulaIdAndActivoTrue(Long aulaId);
+
+    /** Secciones activas que usan un aula (para no dejarle al aula menos capacidad que la de una sección). */
+    List<Seccion> findByAulaIdAndActivoTrue(Long aulaId);
 
     long countByTutorId(Long docenteId);
 }

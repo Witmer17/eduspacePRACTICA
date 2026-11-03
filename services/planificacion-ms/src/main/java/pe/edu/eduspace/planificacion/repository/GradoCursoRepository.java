@@ -12,5 +12,7 @@ public interface GradoCursoRepository extends JpaRepository<GradoCurso, Long> {
 
     boolean existsByGradoIdAndCursoId(Long gradoId, Long cursoId);
 
+    long countByGradoId(Long gradoId);
+
     long countByCursoId(Long cursoId);
 }

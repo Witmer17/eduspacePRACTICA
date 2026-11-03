@@ -15,3 +15,5 @@ until $CT exec $NOMBRE /opt/keycloak/bin/kcadm.sh config credentials --server ht
 # La consola de administración (realm master) también necesita HTTP en DEV.
 $CT exec $NOMBRE /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE >/dev/null
 echo "Keycloak listo: http://localhost:$PUERTO  (consola: admin / ${KC_ADMIN_PASSWORD:-admin})  ·  realm: http://localhost:$PUERTO/realms/eduspace"
+# Cliente de servicio que usa auth-ms para administrar cuentas (el secreto está en .secreto-admin, ignorado por git).
+[ -s "$AQUI/.secreto-admin" ] && CONTENEDORES=$CT KEYCLOAK_ADMIN_SECRET="$(cat "$AQUI/.secreto-admin")" "$AQUI/crear-cliente-admin.sh"

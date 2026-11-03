@@ -1,4 +1,4 @@
 {
-  "authMode": "eduspace",
-  "keycloak": { "url": "http://localhost:18090", "realm": "eduspace", "clientId": "eduspace-web", "clientIdFormulario": "eduspace-web-form" }
+  "authMode": "keycloak-form",
+  "keycloak": { "url": "/kc", "realm": "eduspace", "clientId": "eduspace-web", "clientIdFormulario": "eduspace-web-form" }
 }

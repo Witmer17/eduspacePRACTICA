@@ -40,6 +40,13 @@ public class SecurityConfig {
                     if (swaggerPublic) {
                         auth.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll();
                     }
+                    // Contratos y pagos del personal: sensibles, solo ADMIN también para leer (antes que la regla general de GET).
+                    auth.requestMatchers("/api/v1/planificacion/rrhh/**").hasRole("ADMIN");
+                    // Asistencia del personal: ADMIN y SECRETARIA, también para leer.
+                    auth.requestMatchers("/api/v1/planificacion/asistencia-personal/**").hasAnyRole("ADMIN", "SECRETARIA");
+                    // Lo propio de cada persona del personal (su contrato, sus pagos…): solo lectura, solo personal; la persona sale del token.
+                    auth.requestMatchers(HttpMethod.GET, "/api/v1/planificacion/mi-personal/**", "/api/v1/planificacion/mi-personal")
+                            .hasAnyRole("ADMIN", "SECRETARIA", "DOCENTE", "CAJERO");
                     auth.requestMatchers(HttpMethod.GET, "/api/v1/planificacion/**").authenticated();
                     auth.requestMatchers("/api/v1/planificacion/horarios/**", "/api/v1/planificacion/asignaciones/**",
                             "/api/v1/planificacion/docentes/**").hasAnyRole("ADMIN", "SECRETARIA");

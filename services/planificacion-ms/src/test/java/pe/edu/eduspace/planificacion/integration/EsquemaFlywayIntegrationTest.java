@@ -9,23 +9,32 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/** Si el contexto arranca, Hibernate (ddl-auto=validate) confirmó que las 14 entidades calzan con el SQL. */
+/** Si el contexto arranca, Hibernate (ddl-auto=validate) confirmó que las 16 entidades calzan con el SQL. */
 class EsquemaFlywayIntegrationTest extends PostgresIntegrationTestBase {
 
     @MockitoBean KafkaTemplate<String, String> kafkaTemplate;
     @Autowired JdbcTemplate jdbc;
 
     @Test
-    void flywayCreaLas14TablasYLaSemilla() {
+    void flywayCreaLas23TablasYLaSemilla() {
         List<String> tablas = jdbc.queryForList("""
                 select table_name from information_schema.tables
                 where table_schema = 'public' and table_name <> 'flyway_schema_history' order by 1
                 """, String.class);
         assertThat(tablas).containsExactlyInAnyOrder("anios_academicos", "periodos", "niveles", "grados", "aulas",
                 "secciones", "cursos", "grado_cursos", "docentes", "asignaciones", "bloques_horarios", "horarios",
-                "publicaciones_horario", "feriados", "outbox_eventos");
+                "publicaciones_horario", "feriados", "outbox_eventos", "areas", "colegio", "pabellones", "docente_cursos",
+                "contratos_personal", "pagos_personal", "asistencia_personal", "cuentas_deposito_personal");
         assertThat(jdbc.queryForObject("select count(*) from niveles", Integer.class)).isEqualTo(3);
         assertThat(jdbc.queryForObject("select count(*) from grados", Integer.class)).isEqualTo(14);
+    }
+
+    @Test
+    void laSemillaTraeLas14AreasDeTrabajoYDocenciaExiste() {
+        assertThat(jdbc.queryForObject("select count(*) from areas", Integer.class)).isEqualTo(14);
+        assertThat(jdbc.queryForObject("select count(*) from areas where codigo = 'DOCENCIA' and activo", Integer.class)).isEqualTo(1);
+        // toda persona del personal debe tener área (la columna es obligatoria y con llave foránea)
+        assertThat(jdbc.queryForObject("select is_nullable from information_schema.columns where table_name = 'docentes' and column_name = 'area_id'", String.class)).isEqualTo("NO");
     }
 
     @Test

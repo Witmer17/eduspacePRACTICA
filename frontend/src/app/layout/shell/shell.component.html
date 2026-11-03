@@ -1,13 +1,18 @@
 <app-aviso-servicio />
-@if (esAula()) {
-  <div class="aula-app">
+@if (barraSuperior()) {
+  <div class="aula-app" [class.personal]="esPersonal()">
     <header class="aula-barra">
-      <a class="aula-marca" [routerLink]="navAula()[0]?.ruta ?? '/'" aria-label="EduSpace, ir a mis cursos">
-        <span class="aula-logo" aria-hidden="true">E</span><span class="aula-nombre">EduSpace</span>
+      <a class="aula-marca" [routerLink]="navSuperior()[0]?.ruta ?? '/'" [attr.aria-label]="esPersonal() ? 'EduSpace, ir al inicio' : 'EduSpace, ir a mis cursos'">
+        @if (esPersonal()) {
+          <img src="/img/colegio-escudo.svg" alt="" class="aula-escudo" aria-hidden="true" />
+        } @else {
+          <span class="aula-logo" aria-hidden="true">E</span>
+        }
+        <span class="aula-nombre">EduSpace</span>
       </a>
       <nav class="aula-nav" aria-label="Principal">
-        @for (e of navAula(); track e.ruta) {
-          <a class="aula-pill" [routerLink]="e.ruta" [class.on]="activoAula(e)" [attr.aria-current]="activoAula(e) ? 'page' : null">
+        @for (e of navSuperior(); track e.ruta) {
+          <a class="aula-pill" [routerLink]="e.ruta" [class.on]="activoSuperior(e)" [attr.aria-current]="activoSuperior(e) ? 'page' : null">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path [attr.d]="e.icono" /></svg>
             <span>{{ e.etiqueta }}</span>
           </a>
@@ -39,7 +44,43 @@
         </div>
       </div>
     </header>
-    <main class="aula-main"><router-outlet /></main>
+    <main class="aula-main">
+      <div [class.con-menu]="!!hubActual()">
+        @if (hubActual(); as h) {
+          <nav class="menu-v" [attr.aria-label]="h.hub.titulo">
+            <div class="menu-v-titulo" [title]="h.hub.descripcion">{{ h.hub.titulo }}</div>
+            @for (p of h.pestanas; track p.ruta; let i = $index) {
+              @if (p.grupo && (i === 0 || h.pestanas[i - 1].grupo !== p.grupo)) {
+                <div class="menu-v-grupo">{{ p.grupo }}</div>
+              }
+              <a class="menu-v-item" [routerLink]="p.ruta" [class.on]="padreActivo(p.ruta, h.activa)" [attr.aria-current]="padreActivo(p.ruta, h.activa) ? 'page' : null">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path [attr.d]="p.icono" /></svg>
+                <span>{{ p.etiqueta }}</span>
+                @if (p.conHijos) {
+                  <svg class="flecha" [class.abierta]="arbolAbierto(p.ruta)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+                }
+              </a>
+              @if (p.conHijos && arbolAbierto(p.ruta)) {
+                <div class="menu-v-arbol" role="group" [attr.aria-label]="'Grados de ' + p.etiqueta">
+                  @for (g of arbol(); track g.codigo) {
+                    <div class="menu-v-nivel n-{{ g.codigo.toLowerCase() }}">{{ g.nivel }}</div>
+                    @for (c of g.hijos; track c.ruta) {
+                      <a class="menu-v-item hijo n-{{ g.codigo.toLowerCase() }}" [routerLink]="c.ruta" [class.on]="hijoActivo(c)" [attr.aria-current]="hijoActivo(c) ? 'page' : null">
+                        <span class="hijo-punto" aria-hidden="true"></span>
+                        <span>{{ c.etiqueta }}</span>
+                      </a>
+                    }
+                  } @empty {
+                    <span class="menu-v-vacio">Cargando grados…</span>
+                  }
+                </div>
+              }
+            }
+          </nav>
+        }
+        <div class="menu-v-contenido"><router-outlet /></div>
+      </div>
+    </main>
   </div>
 } @else {
 <div class="app">
@@ -69,12 +110,6 @@
             }
           </a>
         }
-      }
-      @if (esKeycloak && esAdmin()) {
-        <a class="item" [href]="consolaAdmin" target="_blank" rel="noopener noreferrer">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /></svg>
-          <span>Cuentas y roles (Keycloak)</span>
-        </a>
       }
     </nav>
 

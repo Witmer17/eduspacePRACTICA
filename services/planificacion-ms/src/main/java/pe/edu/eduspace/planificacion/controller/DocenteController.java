@@ -31,12 +31,18 @@ public class DocenteController {
         return internal.docentePorUsuario(jwt.getClaim("usuarioId"));
     }
 
+    /**
+     * Sin {@code areaId} ni {@code todas}: solo el área Docencia (lo que esperan los selectores de docente y tutor).
+     * Con {@code areaId}: el personal de esa área. Con {@code todas=true}: todo el personal.
+     */
     @GetMapping
     public PageResponse<DocenteResponse> buscar(@RequestParam(required = false) String q,
+                                                @RequestParam(required = false) Long areaId,
+                                                @RequestParam(defaultValue = "false") boolean todas,
                                                 @RequestParam(defaultValue = "0") int page,
                                                 @RequestParam(defaultValue = "20") int size) {
         int tamano = Math.min(Math.max(size, 1), 100);
-        return service.buscar(q, PageRequest.of(Math.max(page, 0), tamano, Sort.by("apellidos", "nombres")));
+        return service.buscar(q, areaId, todas, PageRequest.of(Math.max(page, 0), tamano, Sort.by("apellidos", "nombres")));
     }
 
     @GetMapping("/{id}")

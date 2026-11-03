@@ -93,6 +93,19 @@ table.table { width: 100%; border-collapse: collapse; font-size: 13px; min-width
 /* Barras de herramientas */
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .toolbar .grow { flex: 1 1 220px; }
+/* Color de cada nivel escolar: lo usan el árbol del menú, las tarjetas de grado y su detalle */
+.n-inicial { --nivel: #c2410c; --nivel-2: #f59e0b; --nivel-suave: #fff1e0; }
+.n-primaria { --nivel: #1d4ed8; --nivel-2: #38bdf8; --nivel-suave: #e8f0ff; }
+.n-secundaria { --nivel: #6d28d9; --nivel-2: #ec4899; --nivel-suave: #f3ecff; }
+.n-otro { --nivel: #0f766e; --nivel-2: #2dd4bf; --nivel-suave: #e0f7f4; }
+/* Pantallas de configuración: bloques con el color de la pantalla y rejilla de dos columnas */
+.cfg-dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.cfg-bloque { padding: 16px 18px 18px; background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--nivel, var(--primary)); border-radius: 16px; }
+.cfg-bloque > h2 { margin: 0 0 12px; font-size: .95rem; font-weight: 800; color: var(--nivel, var(--primary)); }
+@media (max-width: 980px) { .cfg-dos { grid-template-columns: minmax(0, 1fr); } }
+/* Personal por áreas: combo de áreas, buscador y botones en una sola línea (en pantallas angostas pasan a varias) */
+.linea-personal .area-sel { flex: 0 1 280px; min-width: 190px; }
+@media (min-width: 900px) { .linea-personal { flex-wrap: nowrap; } }
 .page { display: flex; flex-direction: column; gap: 20px; }
 
 /* Indicadores */

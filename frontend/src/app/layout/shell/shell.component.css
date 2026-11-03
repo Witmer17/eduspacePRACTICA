@@ -91,6 +91,53 @@
 .aula-menu a:hover, .aula-menu button:hover { background: var(--primary-soft); }
 .aula-menu .salir { color: var(--danger); }
 .aula-main { max-width: 1180px; margin: 0 auto; padding: 26px 28px 60px; }
+
+/* Variante del personal (ADMIN/SECRETARIA): marca con el escudo, más espacio para las pantallas de gestión */
+.aula-escudo { width: 34px; height: 34px; object-fit: contain; }
+.aula-app.personal .aula-main { max-width: 1440px; }
+.aula-app.personal .aula-barra { border-bottom: 2px solid rgb(251 191 36 / .35); }
+.aula-app.personal .pestanas { margin-top: 0; }
+
+/* Menú vertical del espacio de trabajo (Personal, Configuración, Matrícula…): a la izquierda del contenido, con un ícono por opción */
+.con-menu { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 28px; align-items: start; }
+.menu-v-contenido { min-width: 0; }
+.menu-v { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 2px; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.menu-v-titulo { padding: 6px 12px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2); }
+.menu-v-item { position: relative; display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 12px; border-radius: 10px; color: var(--ink-2); text-decoration: none; font-size: .93rem; font-weight: 500; transition: background .15s, color .15s; }
+.menu-v-item svg { flex: none; }
+.menu-v-item:hover { background: var(--primary-soft); color: var(--primary); }
+.menu-v-item.on { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+.menu-v-item.on::before { content: ''; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--primary); }
+.menu-v-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+/* Encabezado de grupo dentro del menú vertical (El colegio, Año escolar, Personal…) */
+.menu-v-grupo { padding: 12px 12px 4px; font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); opacity: .8; }
+/* Árbol de «Estructura académica»: todos los grados, por nivel, sangrados bajo su opción */
+.flecha { margin-left: auto; opacity: .6; transition: transform .2s; }
+.flecha.abierta { transform: rotate(180deg); }
+.menu-v-arbol { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 20px; padding-left: 10px; border-left: 2px solid var(--line); }
+.menu-v-nivel { display: flex; align-items: center; gap: 7px; padding: 8px 8px 3px; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--nivel, var(--ink-2)); }
+.menu-v-nivel::before { content: ''; width: 7px; height: 7px; border-radius: 2px; background: var(--nivel, var(--ink-2)); }
+.menu-v-item.hijo { min-height: 34px; padding: 0 8px; gap: 9px; font-size: .88rem; }
+.menu-v-item.hijo span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-v-item.hijo:hover { background: var(--nivel-suave, var(--primary-soft)); color: var(--nivel, var(--primary)); }
+.menu-v-item.hijo.on { background: var(--nivel-suave, var(--primary-soft)); color: var(--nivel, var(--primary)); font-weight: 700; }
+.menu-v-item.hijo.on::before { display: none; }
+.hijo-punto { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--nivel, currentColor); opacity: .7; }
+.menu-v-vacio { padding: 8px 10px; font-size: .82rem; color: var(--ink-2); }
+@media (max-width: 900px) {
+  /* En la fila deslizable los grados siguen a su opción, sin sangría ni títulos de nivel */
+  .menu-v-arbol { display: contents; }
+  .menu-v-nivel, .flecha, .menu-v-grupo { display: none; }
+}
+@media (max-width: 900px) {
+  /* En pantallas angostas el menú pasa arriba, en una sola fila que se desliza */
+  .con-menu { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .menu-v { position: static; flex-direction: row; overflow-x: auto; padding: 6px; scrollbar-width: none; }
+  .menu-v::-webkit-scrollbar { display: none; }
+  .menu-v-titulo { display: none; }
+  .menu-v-item { flex: none; white-space: nowrap; }
+  .menu-v-item.on::before { display: none; }
+}
 @media (max-width: 780px) {
   .aula-barra { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
   .aula-nombre { display: none; }

@@ -1,6 +1,5 @@
 import { Routes } from '@angular/router';
 import { authGuard, guestGuard } from './core/guards/auth.guard';
-import { modoGuard } from './core/guards/modo.guard';
 import { roleGuard } from './core/guards/role.guard';
 import { ShellComponent } from './layout/shell/shell.component';
 import { AuthService } from './core/services/auth.service';
@@ -52,6 +51,13 @@ export const routes: Routes = [
         path: 'ayuda',
         loadComponent: () => import('./features/ayuda/ayuda.component').then(m => m.AyudaComponent)
       },
+      // Lo propio de quien trabaja en el colegio: su contrato, asistencia, pagos y cuenta de depósito (solo lectura).
+      {
+        path: 'mi-trabajo',
+        canActivate: [roleGuard],
+        data: { roles: ['DOCENTE', 'CAJERO'] },
+        loadComponent: () => import('./features/mi-trabajo/mi-trabajo.component').then(m => m.MiTrabajoComponent)
+      },
       {
         path: 'mi-perfil',
         loadComponent: () => import('./features/perfil/perfil.component').then(m => m.PerfilComponent)
@@ -92,14 +98,14 @@ export const routes: Routes = [
       },
       {
         path: 'usuarios',
-        canActivate: [roleGuard, modoGuard],
-        data: { roles: SOLO_ADMIN, modo: 'eduspace' },
+        canActivate: [roleGuard],
+        data: { roles: SOLO_ADMIN },
         loadComponent: () => import('./features/usuarios/usuarios.component').then(m => m.UsuariosComponent)
       },
       {
         path: 'cuentas',
-        canActivate: [roleGuard, modoGuard],
-        data: { roles: SOLO_ADMIN, modo: 'eduspace' },
+        canActivate: [roleGuard],
+        data: { roles: SOLO_ADMIN },
         loadComponent: () => import('./features/cuentas/cuentas.component').then(m => m.CuentasComponent)
       },
       {
@@ -313,6 +319,54 @@ export const routes: Routes = [
         loadComponent: () => import('./features/planificacion/aulas-disponibles/aulas-disponibles.component').then(m => m.AulasDisponiblesComponent)
       },
       {
+        path: 'configuracion',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/resumen/configuracion-resumen.component').then(m => m.ConfiguracionResumenComponent)
+      },
+      {
+        path: 'configuracion/colegio',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/colegio/colegio-datos.component').then(m => m.ColegioDatosComponent)
+      },
+      {
+        path: 'configuracion/grados',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/grados/grados-oferta.component').then(m => m.GradosOfertaComponent)
+      },
+      {
+        path: 'apertura',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/apertura/apertura.component').then(m => m.AperturaComponent)
+      },
+      {
+        path: 'configuracion/cursos',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/cursos/cursos-oferta.component').then(m => m.CursosOfertaComponent)
+      },
+      {
+        path: 'configuracion/areas',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/areas/areas-config.component').then(m => m.AreasConfigComponent)
+      },
+      {
+        path: 'configuracion/estructura',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/estructura/estructura.component').then(m => m.EstructuraComponent)
+      },
+      {
+        path: 'configuracion/estructura/:gradoId',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/estructura/grado-detalle.component').then(m => m.GradoDetalleComponent)
+      },
+      {
         path: 'planificacion/malla',
         canActivate: [roleGuard],
         data: { roles: PERSONAL },
@@ -366,11 +420,37 @@ export const routes: Routes = [
         data: { roles: PERSONAL },
         loadComponent: () => import('./features/planificacion/cursos/cursos.component').then(m => m.CursosComponent)
       },
+      // Dentro de Personal: la asistencia es de ADMIN y SECRETARIA; el pago (contratos, sueldos, planilla) solo del ADMIN (el backend lo exige).
+      // Páginas de las áreas de trabajo: el panel con todas y la página de cada una (las que tienen sección propia llevan allí desde su tarjeta).
       {
-        path: 'planificacion/docentes',
+        path: 'areas',
         canActivate: [roleGuard],
         data: { roles: PERSONAL },
-        loadComponent: () => import('./features/planificacion/docentes/docentes.component').then(m => m.DocentesComponent)
+        loadComponent: () => import('./features/areas/areas-panel.component').then(m => m.AreasPanelComponent)
+      },
+      {
+        path: 'areas/:codigo',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/areas/area-pagina.component').then(m => m.AreaPaginaComponent)
+      },
+      {
+        path: 'personal/asistencia',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/personal/asistencia-personal.component').then(m => m.AsistenciaPersonalComponent)
+      },
+      {
+        path: 'personal/pagos',
+        canActivate: [roleGuard],
+        data: { roles: ['ADMIN'] },
+        loadComponent: () => import('./features/personal/pago-personal.component').then(m => m.PagoPersonalComponent)
+      },
+      {
+        path: 'personal',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/personal/personal.component').then(m => m.PersonalComponent)
       },
       {
         path: 'planificacion/aulas',

@@ -8,7 +8,7 @@ import { MatriculaService } from '../../core/services/matricula.service';
 import { PagoConfigService } from '../../core/services/pago-config.service';
 import { PlanificacionService } from '../../core/services/planificacion.service';
 import { UsuarioService } from '../../core/services/usuario.service';
-import { Anio, Docente, Nivel as NivelEscolar, Periodo, Seccion } from '../../core/models/planificacion.model';
+import { Anio, Area, Docente, Nivel as NivelEscolar, Periodo, Seccion } from '../../core/models/planificacion.model';
 import { Campania, Cupo, Matricula } from '../../core/models/matricula.model';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { AulasPanelComponent } from './aulas-panel.component';
@@ -81,7 +81,111 @@ export const ACCESOS: Acceso[] = [
 @Component({
   selector: 'app-dashboard',
   imports: [RouterLink, PageHeaderComponent, AulasPanelComponent, CursosDocentesComponent],
-  templateUrl: './dashboard.component.html'
+  templateUrl: './dashboard.component.html',
+  styles: `
+    .card-personal {
+      position: relative;
+    }
+    .personal-cab {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .personal-tit {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .personal-ico {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .personal-acciones {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .total-badge {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .total-valor {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--ink);
+      line-height: 1;
+    }
+    .total-texto {
+      font-size: 0.8rem;
+      color: var(--ink-2);
+      font-weight: 600;
+    }
+    .areas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+      gap: 12px;
+    }
+    .area-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--bg);
+      text-decoration: none;
+      color: inherit;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .area-item:hover, .area-item:focus-visible {
+      transform: translateY(-2px);
+      border-color: var(--primary);
+      box-shadow: 0 4px 12px rgba(20, 33, 61, 0.06);
+      background: var(--card);
+    }
+    .area-item.con-gente {
+      border-left: 3px solid var(--primary);
+    }
+    .area-item-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .area-nombre {
+      font-weight: 700;
+      font-size: 0.92rem;
+      color: var(--ink);
+      line-height: 1.3;
+    }
+    .area-desc {
+      margin: 0;
+      font-size: 0.78rem;
+      color: var(--ink-2);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  `
 })
 export class DashboardComponent implements OnInit {
   private readonly auth = inject(AuthService);
@@ -94,6 +198,33 @@ export class DashboardComponent implements OnInit {
   protected readonly esAdmin = this.auth.isAdmin;
   protected readonly nombre = this.auth.currentUser;
   protected readonly cargando = signal(true);
+
+  // --- Personal institucional por áreas ---
+  protected readonly cargandoPersonal = signal(true);
+  protected readonly areas = signal<Area[]>([]);
+  protected readonly personal = signal<Docente[]>([]);
+  protected readonly totalPersonal = signal(0);
+
+  /** Conteo y distribución del personal en cada una de las áreas del colegio. */
+  protected readonly conteoPorArea = computed(() => {
+    const areas = this.areas();
+    const personas = this.personal();
+    const mapa = new Map<number, number>();
+    for (const p of personas) {
+      if (p.areaId) {
+        mapa.set(p.areaId, (mapa.get(p.areaId) ?? 0) + 1);
+      }
+    }
+    return areas
+      .map(a => ({
+        id: a.id,
+        codigo: a.codigo,
+        nombre: a.nombre,
+        descripcion: a.descripcion,
+        cantidad: mapa.get(a.id) ?? 0
+      }))
+      .sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre, 'es'));
+  });
   /** La tarjeta «Necesita tu atención» flota sobre la pantalla: empieza cerrada (la campana muestra cuántos pendientes hay) para no tapar el resto. */
   protected readonly verAtencion = signal(false);
   protected readonly datos = signal<Datos>(VACIO);
@@ -172,7 +303,7 @@ export class DashboardComponent implements OnInit {
       { hecho: !!d.anio, titulo: 'Año académico activo', ayuda: 'Es la base de todo lo demás.', ruta: '/planificacion/anios' },
       { hecho: (d.periodos?.length ?? 0) > 0, titulo: 'Periodos (bimestres o trimestres)', ayuda: 'Las notas y los boletines se cierran por periodo.', ruta: '/planificacion/anios' },
       { hecho: (d.secciones?.length ?? 0) > 0, titulo: 'Secciones con su capacidad', ayuda: 'La capacidad define los cupos de matrícula.', ruta: '/planificacion/secciones' },
-      { hecho: (d.docentes ?? 0) > 0, titulo: 'Docentes registrados', ayuda: 'Hacen falta para asignar cursos y armar horarios.', ruta: '/planificacion/docentes' },
+      { hecho: (d.docentes ?? 0) > 0, titulo: 'Docentes registrados', ayuda: 'Hacen falta para asignar cursos y armar horarios.', ruta: '/personal' },
       { hecho: (d.campanias ?? []).some(c => c.estado === 'ABIERTA'), titulo: 'Campaña de matrícula abierta', ayuda: 'Permite matricular dentro de sus fechas.', ruta: '/matriculas/campanias' }
     ];
     if (this.esAdmin()) {
@@ -184,7 +315,18 @@ export class DashboardComponent implements OnInit {
   protected readonly pasosHechos = computed(() => this.pasos().filter(p => p.hecho).length);
   protected readonly configurado = computed(() => !this.cargando() && this.pasosHechos() === this.pasos().length);
 
+  /**
+   * Inicio vaciado a propósito (rediseño): el contenido anterior (atención, indicadores, matrícula, aulas, cursos, accesos)
+   * sigue en la plantilla pero oculto. Ponerlo en `true` lo devuelve tal cual y vuelve a cargar sus datos.
+   */
+  protected readonly mostrarPanel = false;
+
   ngOnInit(): void {
+    this.cargarPersonal();
+    if (!this.mostrarPanel) {
+      this.cargando.set(false);
+      return;
+    }
     forkJoin({
       anio: seguro(this.plan.anioActivo()),
       docentes: seguro(this.plan.docentes('', 0, 200)),
@@ -239,6 +381,23 @@ export class DashboardComponent implements OnInit {
         tarifas: x.tarifas?.filter(t => t.activo !== false).length ?? null
       }));
       if (primera) this.cargando.set(false);
+    });
+  }
+
+  protected cargarPersonal(): void {
+    this.cargandoPersonal.set(true);
+    forkJoin({
+      areas: seguro(this.plan.areas()),
+      personal: seguro(this.plan.personal('', 0, 100))
+    }).subscribe(r => {
+      if (r.areas) {
+        this.areas.set(r.areas.filter(a => a.activo));
+      }
+      if (r.personal) {
+        this.personal.set(r.personal.contenido ?? []);
+        this.totalPersonal.set(r.personal.totalElementos ?? r.personal.contenido?.length ?? 0);
+      }
+      this.cargandoPersonal.set(false);
     });
   }
 

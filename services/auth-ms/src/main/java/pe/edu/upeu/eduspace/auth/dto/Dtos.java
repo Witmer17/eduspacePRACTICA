@@ -24,6 +24,8 @@ public final class Dtos {
 
     public record CambiarClaveRequest(@NotBlank String claveActual, @NotBlank String claveNueva) {}
 
+    public record EstadoClaveResponse(boolean debeCambiarClave) {}
+
     public record UsuarioCreateRequest(
         @NotBlank @Size(min = 3, max = 80) @Pattern(regexp = "[A-Za-z0-9._-]+", message = "username solo admite letras, números, punto, guion y guion bajo") String username,
         @NotBlank @Email @Size(max = 150) String email,

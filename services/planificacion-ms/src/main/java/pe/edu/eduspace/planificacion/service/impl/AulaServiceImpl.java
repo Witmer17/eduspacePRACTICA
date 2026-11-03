@@ -7,12 +7,14 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.eduspace.planificacion.dto.AulaRequest;
 import pe.edu.eduspace.planificacion.dto.AulaResponse;
 import pe.edu.eduspace.planificacion.entity.Aula;
+import pe.edu.eduspace.planificacion.entity.Pabellon;
 import pe.edu.eduspace.planificacion.entity.TipoAula;
 import pe.edu.eduspace.planificacion.exception.BusinessRuleException;
 import pe.edu.eduspace.planificacion.exception.ResourceNotFoundException;
 import pe.edu.eduspace.planificacion.mapper.PlanificacionMapper;
 import pe.edu.eduspace.planificacion.repository.AulaRepository;
 import pe.edu.eduspace.planificacion.repository.HorarioRepository;
+import pe.edu.eduspace.planificacion.repository.PabellonRepository;
 import pe.edu.eduspace.planificacion.repository.SeccionRepository;
 import pe.edu.eduspace.planificacion.service.AulaService;
 
@@ -22,6 +24,7 @@ import pe.edu.eduspace.planificacion.service.AulaService;
 public class AulaServiceImpl implements AulaService {
 
     private final AulaRepository repository;
+    private final PabellonRepository pabellonRepository;
     private final SeccionRepository seccionRepository;
     private final HorarioRepository horarioRepository;
     private final PlanificacionMapper mapper;
@@ -47,6 +50,7 @@ public class AulaServiceImpl implements AulaService {
         Aula aula = mapper.toEntity(request);
         aula.setTipo(request.tipo() == null ? TipoAula.AULA : request.tipo());
         aula.setActivo(request.activo() == null || request.activo());
+        aula.setPabellon(pabellonPara(request.pabellonId(), null));
         return mapper.toResponse(repository.save(aula));
     }
 
@@ -60,7 +64,9 @@ public class AulaServiceImpl implements AulaService {
         if (desactivar && enUso(id)) {
             throw new BusinessRuleException("No se puede desactivar un aula usada en horarios o secciones vigentes");
         }
+        Pabellon pabellon = pabellonPara(request.pabellonId(), id);
         mapper.update(request, aula);
+        aula.setPabellon(pabellon);
         if (request.tipo() == null) {
             aula.setTipo(TipoAula.AULA);
         }
@@ -77,6 +83,18 @@ public class AulaServiceImpl implements AulaService {
             throw new BusinessRuleException("El aula está en uso (secciones u horarios): desactívela en lugar de eliminarla");
         }
         repository.delete(aula);
+    }
+
+    /** El pabellón pedido (o ninguno). No deja registrar más aulas de las que el pabellón declara tener. */
+    private Pabellon pabellonPara(Long pabellonId, Long aulaId) {
+        if (pabellonId == null) return null;
+        Pabellon pabellon = pabellonRepository.findById(pabellonId).orElseThrow(() -> ResourceNotFoundException.of("Pabellón", pabellonId));
+        long yaRegistradas = aulaId == null ? repository.countByPabellonId(pabellonId) : repository.countByPabellonIdAndIdNot(pabellonId, aulaId);
+        if (yaRegistradas >= pabellon.getCantidadAulas()) {
+            throw new BusinessRuleException("El pabellón " + pabellon.getNombre() + " declara " + pabellon.getCantidadAulas()
+                    + (pabellon.getCantidadAulas() == 1 ? " aula" : " aulas") + " y ya están registradas. Sube la cantidad del pabellón o elige otro.");
+        }
+        return pabellon;
     }
 
     private boolean enUso(Long aulaId) {

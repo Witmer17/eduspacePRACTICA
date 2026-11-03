@@ -17,13 +17,14 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Capacidad</th><th>Estado</th><th></th></tr>
+          <tr><th>Código</th><th>Nombre</th><th>Pabellón</th><th>Tipo</th><th>Capacidad</th><th>Estado</th><th></th></tr>
         </thead>
         <tbody>
           @for (a of aulas(); track a.id) {
             <tr>
               <td>{{ a.codigo }}</td>
               <td><strong>{{ a.nombre }}</strong></td>
+              <td>@if (a.pabellonNombre) { <span class="badge badge-violet">Pabellón {{ a.pabellonNombre }}</span> } @else { <span class="muted">—</span> }</td>
               <td>{{ a.tipo }}</td>
               <td>{{ a.capacidad }}</td>
               <td><span [class]="'badge ' + (a.activo ? 'badge-ok' : 'badge-gray')">{{ a.activo ? 'Activa' : 'Inactiva' }}</span></td>
@@ -33,7 +34,7 @@
               }</td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="vacio">{{ cargando() ? 'Cargando…' : 'Aún no hay aulas.' }}</td></tr>
+            <tr><td colspan="7" class="vacio">{{ cargando() ? 'Cargando…' : 'Aún no hay aulas.' }}</td></tr>
           }
         </tbody>
       </table>
@@ -60,6 +61,16 @@
           <label for="al-nombre">Nombre</label>
           <input id="al-nombre" formControlName="nombre" />
           @if (form.controls.nombre.touched && form.controls.nombre.invalid) { <span class="error">Obligatorio.</span> }
+        </div>
+        <div class="field full">
+          <label for="al-pab">Pabellón</label>
+          <select id="al-pab" formControlName="pabellonId">
+            <option [ngValue]="0">Sin pabellón</option>
+            @for (p of pabellones(); track p.id) {
+              <option [ngValue]="p.id" [disabled]="!hayLugar(p)">Pabellón {{ p.nombre }} · {{ p.aulasRegistradas }} de {{ p.cantidadAulas }} aulas{{ hayLugar(p) ? '' : ' (completo)' }}</option>
+            }
+          </select>
+          @if (!pabellones().length) { <span class="muted">Los pabellones se crean en Configuración → Datos del colegio.</span> }
         </div>
         <div class="field">
           <label for="al-cap">Capacidad</label>

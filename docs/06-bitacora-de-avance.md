@@ -21,7 +21,7 @@ Resumen cronológico de lo hecho sobre `eduspace-completo/`. El detalle técnico
 | 15 | Menú por espacios de trabajo (oct. 29) | 8 entradas con pestañas, paneles de aulas y cursos, aulas disponibles. Detalle en `09-espacios-de-trabajo.md`. |
 | 16 | Cuentas de personas y documentación del sistema (oct. 29) | Cuentas con usuario nombre.apellido y clave = documento, cambio obligatorio, restauración; documentación completa en `docs/sistema/` con métricas. |
 | 17 | Matrícula en línea (oct. 29) | Sitio público: reserva, pago simulado, confirmación, cuentas, constancia PDF y correo con horario y finanzas. Detalle en `sistema/matricula-en-linea.md`. |
-| 18 | App móvil, aprobación de matrículas y materiales (oct. 29) | App Flutter por rol (docente, alumno, apoderado) con carga por rol y servidor configurable; matrícula pagada → `POR_APROBAR` → aprobación del ADMIN → correo con el acceso; materiales de curso subidos por el docente; preparación de la exposición (`tools/demo/preparar_exposicion.py`, `docs/presentacion/05-demo-rapida.md`). |
+| 18 | App móvil, aprobación de matrículas y materiales (oct. 29–30; detalle en `docs/10-avance-2026-10-30.md`) | App Flutter por rol (docente, alumno, apoderado) con carga por rol y servidor configurable; matrícula pagada → `POR_APROBAR` → aprobación del ADMIN → correo con el acceso; materiales de curso subidos por el docente; preparación de la exposición (`tools/demo/preparar_exposicion.py`, `docs/presentacion/05-demo-rapida.md`). |
 
 ## Estado final
 - 10 servicios con base de datos + Config Server, Eureka y Gateway funcionando juntos.

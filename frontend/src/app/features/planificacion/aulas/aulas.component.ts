@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Aula, TIPOS_AULA, TipoAula } from '../../../core/models/planificacion.model';
+import { Aula, Pabellon, TIPOS_AULA, TipoAula } from '../../../core/models/planificacion.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmService } from '../../../core/services/confirm.service';
 import { NotificationService } from '../../../core/services/notification.service';
@@ -25,6 +25,7 @@ export class AulasComponent implements OnInit {
 
   protected readonly tipos = TIPOS_AULA;
   protected readonly aulas = signal<Aula[]>([]);
+  protected readonly pabellones = signal<Pabellon[]>([]);
   protected readonly cargando = signal(false);
   protected readonly abierto = signal(false);
   protected readonly editando = signal<Aula | null>(null);
@@ -38,11 +39,19 @@ export class AulasComponent implements OnInit {
     nombre: ['', [Validators.required, Validators.maxLength(100)]],
     tipo: ['AULA' as TipoAula, Validators.required],
     capacidad: [30, [Validators.required, Validators.min(1)]],
+    /** 0 = sin pabellón. */
+    pabellonId: [0],
     activo: [true]
   });
 
   ngOnInit(): void {
     this.cargar();
+    this.api.pabellones().subscribe({ next: p => this.pabellones.set(p), error: () => this.pabellones.set([]) });
+  }
+
+  /** ¿Se puede elegir este pabellón para el aula que se edita? Sí si tiene lugar o si ya es el suyo. */
+  protected hayLugar(p: Pabellon): boolean {
+    return p.aulasRegistradas < p.cantidadAulas || p.id === this.editando()?.pabellonId;
   }
 
   protected cargar(): void {
@@ -60,12 +69,12 @@ export class AulasComponent implements OnInit {
   }
 
   protected nueva(): void {
-    this.form.reset({ codigo: '', nombre: '', tipo: 'AULA', capacidad: 30, activo: true });
+    this.form.reset({ codigo: '', nombre: '', tipo: 'AULA', capacidad: 30, pabellonId: 0, activo: true });
     this.abrir(null);
   }
 
   protected editar(a: Aula): void {
-    this.form.reset({ codigo: a.codigo, nombre: a.nombre, tipo: a.tipo, capacidad: a.capacidad, activo: a.activo });
+    this.form.reset({ codigo: a.codigo, nombre: a.nombre, tipo: a.tipo, capacidad: a.capacidad, pabellonId: a.pabellonId ?? 0, activo: a.activo });
     this.abrir(a);
   }
 
@@ -86,7 +95,7 @@ export class AulasComponent implements OnInit {
       return;
     }
     const v = this.form.getRawValue();
-    const body = { ...v, codigo: v.codigo.trim(), nombre: v.nombre.trim() };
+    const body = { ...v, codigo: v.codigo.trim(), nombre: v.nombre.trim(), pabellonId: v.pabellonId || null };
     const e = this.editando();
     this.guardando.set(true);
     (e ? this.api.actualizarAula(e.id, body) : this.api.crearAula(body)).subscribe({
@@ -95,6 +104,7 @@ export class AulasComponent implements OnInit {
         this.avisos.success(e ? 'Aula actualizada.' : 'Aula creada.');
         this.cerrar();
         this.cargar();
+        this.api.pabellones().subscribe({ next: p => this.pabellones.set(p), error: () => undefined }); // cambian las aulas registradas de cada pabellón
       },
       error: err => {
         this.guardando.set(false);

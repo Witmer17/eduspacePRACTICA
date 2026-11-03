@@ -5,8 +5,10 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.eduspace.planificacion.dto.CatalogoUpdateRequest;
+import pe.edu.eduspace.planificacion.dto.GradoOfertaResponse;
 import pe.edu.eduspace.planificacion.dto.GradoResponse;
 import pe.edu.eduspace.planificacion.dto.NivelResponse;
+import pe.edu.eduspace.planificacion.dto.OfertaGradosRequest;
 import pe.edu.eduspace.planificacion.service.GradoService;
 import pe.edu.eduspace.planificacion.service.NivelService;
 
@@ -36,6 +38,18 @@ public class NivelGradoController {
     @GetMapping("/grados")
     public List<GradoResponse> grados(@RequestParam(required = false) Long nivelId) {
         return gradoService.listar(nivelId);
+    }
+
+    /** Los 14 grados posibles (Inicial, Primaria y Secundaria), marcando cuáles ofrece el colegio. */
+    @GetMapping("/grados/oferta")
+    public List<GradoOfertaResponse> oferta() {
+        return gradoService.oferta();
+    }
+
+    /** Elige los grados que ofrece el colegio (solo el administrador). */
+    @PutMapping("/grados/oferta")
+    public List<GradoOfertaResponse> actualizarOferta(@Valid @RequestBody OfertaGradosRequest request) {
+        return gradoService.actualizarOferta(request);
     }
 
     @GetMapping("/grados/{id}")

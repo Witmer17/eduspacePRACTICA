@@ -47,12 +47,16 @@ public interface PlanificacionMapper {
     GradoResponse toResponse(Grado grado);
 
     // ---- Aula ----
+    @Mapping(source = "pabellon.id", target = "pabellonId")
+    @Mapping(source = "pabellon.nombre", target = "pabellonNombre")
     AulaResponse toResponse(Aula aula);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "pabellon", ignore = true)
     Aula toEntity(AulaRequest request);
 
     @Mapping(target = "id", ignore = true)
+    @Mapping(target = "pabellon", ignore = true)
     void update(AulaRequest request, @MappingTarget Aula aula);
 
     // ---- Sección ----
@@ -87,11 +91,30 @@ public interface PlanificacionMapper {
     @Mapping(source = "curso.nombre", target = "cursoNombre")
     MallaItemResponse toResponse(GradoCurso gradoCurso);
 
-    // ---- Docente ----
+    // ---- Colegio ----
+    ColegioResponse toResponse(Colegio colegio);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "actualizadoEn", ignore = true)
+    void update(ColegioRequest request, @MappingTarget Colegio colegio);
+
+    // ---- Área / Docente (personal) ----
+    AreaResponse toResponse(Area area);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "activo", ignore = true)
+    Area toEntity(AreaRequest request);
+
+    @Mapping(source = "area.id", target = "areaId")
+    @Mapping(source = "area.codigo", target = "areaCodigo")
+    @Mapping(source = "area.nombre", target = "areaNombre")
+    @Mapping(target = "cursoIds", expression = "java(docente.getCursos().stream().map(c -> c.getId()).sorted().toList())")
     DocenteResponse toResponse(Docente docente);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "usuarioId", ignore = true)
+    @Mapping(target = "area", ignore = true)
+    @Mapping(target = "cursos", ignore = true)
     @Mapping(target = "estado", ignore = true)
     @Mapping(target = "creadoEn", ignore = true)
     @Mapping(target = "actualizadoEn", ignore = true)
@@ -99,6 +122,8 @@ public interface PlanificacionMapper {
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "usuarioId", ignore = true)
+    @Mapping(target = "area", ignore = true)
+    @Mapping(target = "cursos", ignore = true)
     @Mapping(target = "estado", ignore = true)
     @Mapping(target = "creadoEn", ignore = true)
     @Mapping(target = "actualizadoEn", ignore = true)

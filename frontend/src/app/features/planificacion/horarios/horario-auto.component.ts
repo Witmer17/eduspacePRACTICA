@@ -30,7 +30,7 @@ const marcado = (e: Event): boolean => (e.target as HTMLInputElement).checked;
         </select>
         <a class="btn btn-sm" routerLink="/planificacion/cursos-docentes">Cursos y docentes</a>
         <a class="btn btn-sm" routerLink="/planificacion/panel">Aulas y secciones</a>
-        <a class="btn btn-sm" routerLink="/planificacion/bloques">Bloques horarios</a>
+        <a class="btn btn-sm" routerLink="/configuracion/estructura">Bloques horarios</a>
         <a class="btn btn-sm" routerLink="/planificacion/aulas-disponibles">Aulas disponibles</a>
       </div>
 

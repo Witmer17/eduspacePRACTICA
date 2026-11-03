@@ -90,7 +90,7 @@ const texto = (e: Event): string => (e.target as HTMLInputElement | HTMLSelectEl
           </div>
         }
         <p class="muted" style="margin-top: 10px">
-          Un curso solo se puede asignar si está en la malla del grado. <a routerLink="/planificacion/malla">Abrir la malla curricular</a>
+          Un curso solo se puede asignar si está en la malla del grado. <a routerLink="/configuracion/estructura">Abrir la estructura académica (malla por grado)</a>
         </p>
       </div>
     </section>

@@ -293,7 +293,8 @@ public class HorarioGeneradorServiceImpl implements HorarioGeneradorService {
 
     // ------------------------------------------------------------------ asignar docentes por especialidad
     private int autoAsignar(List<Seccion> elegidas, Contexto ctx) {
-        List<Docente> activos = docenteRepository.findAll().stream().filter(d -> d.getEstado() == EstadoDocente.ACTIVO).toList();
+        // Solo el personal del área Docencia puede dictar cursos (el resto del personal no entra al armado de horarios).
+        List<Docente> activos = docenteRepository.findAll().stream().filter(d -> d.getEstado() == EstadoDocente.ACTIVO && d.esDocente()).toList();
         int creadas = 0;
         for (Seccion s : elegidas) {
             Set<Long> conDocente = new java.util.HashSet<>();
@@ -331,6 +332,8 @@ public class HorarioGeneradorServiceImpl implements HorarioGeneradorService {
 
     /** 0 = su especialidad es el curso; 1 = docente generalista del nivel (Primaria/Inicial); 2 = no corresponde. */
     static int prioridad(Docente d, Curso curso, Nivel nivel) {
+        // Los cursos que se eligieron al contratarlo mandan sobre la especialidad escrita a mano.
+        if (d.getCursos().stream().anyMatch(c -> c.getId() != null && c.getId().equals(curso.getId()))) return 0;
         String esp = normalizar(d.getEspecialidad());
         if (esp.isBlank()) return 2;
         String nombre = normalizar(curso.getNombre());

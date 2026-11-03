@@ -22,3 +22,12 @@ logs/
 .vscode/
 *.iml
 .DS_Store
+
+# Volcados de bases de datos (datos personales)
+backups/
+
+# Secreto del cliente de administración de Keycloak (local)
+infra/keycloak/.secreto-admin
+
+# Config local de auth-ms (contiene el secreto de Keycloak)
+services/auth-ms/config/

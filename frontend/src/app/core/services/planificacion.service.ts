@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, map } from 'rxjs';
+import { Observable, forkJoin, map, of, switchMap } from 'rxjs';
 import { Page } from '../models/page.model';
 import {
   Asignacion,
@@ -20,7 +20,14 @@ import {
   ValidacionHorario,
   Anio,
   AnioRequest,
+  Area,
+  AreaRequest,
   Aula,
+  Colegio,
+  ColegioRequest,
+  GradoOferta,
+  Pabellon,
+  PabellonRequest,
   AulaRequest,
   Curso,
   CursoRequest,
@@ -148,6 +155,75 @@ export class PlanificacionService {
     return this.http
       .get<{ contenido: Docente[]; pagina: number; tamano: number; total: number; totalPaginas: number }>(`${API}/docentes`, { params })
       .pipe(map(p => ({ contenido: p.contenido, pagina: p.pagina, tamano: p.tamano, totalElementos: p.total, totalPaginas: p.totalPaginas })));
+  }
+  /** Todo el personal activo del colegio, de todas las áreas y todas las páginas (el servicio entrega de 100 en 100). */
+  todoElPersonalActivo(): Observable<Docente[]> {
+    return this.personal('', 0, 100).pipe(
+      switchMap(primera => {
+        const resto = Array.from({ length: Math.max(0, primera.totalPaginas - 1) }, (_, i) => this.personal('', i + 1, 100).pipe(map(p => p.contenido)));
+        return (resto.length ? forkJoin(resto) : of([] as Docente[][])).pipe(map(otras => [...primera.contenido, ...otras.flat()]));
+      }),
+      map(todos => todos.filter(p => p.estado === 'ACTIVO'))
+    );
+  }
+
+  /** Todo el personal del colegio (o el de un área), no solo los docentes. `docentes()` sigue devolviendo solo Docencia. */
+  personal(q = '', page = 0, size = 20, areaId?: number | null): Observable<Page<Docente>> {
+    let params = new HttpParams().set('page', page).set('size', size);
+    if (q) params = params.set('q', q);
+    params = areaId ? params.set('areaId', areaId) : params.set('todas', true);
+    return this.http
+      .get<{ contenido: Docente[]; pagina: number; tamano: number; total: number; totalPaginas: number }>(`${API}/docentes`, { params })
+      .pipe(map(p => ({ contenido: p.contenido, pagina: p.pagina, tamano: p.tamano, totalElementos: p.total, totalPaginas: p.totalPaginas })));
+  }
+  /** Catálogo de áreas de trabajo (solo las activas; con `todas`, también las inactivas para administrarlas). */
+  areas(todas = false): Observable<Area[]> {
+    return this.http.get<Area[]>(`${API}/areas`, { params: todas ? new HttpParams().set('todas', true) : undefined });
+  }
+  crearArea(body: AreaRequest): Observable<Area> {
+    return this.http.post<Area>(`${API}/areas`, body);
+  }
+  actualizarArea(id: number, body: { nombre: string; descripcion?: string }): Observable<Area> {
+    return this.http.put<Area>(`${API}/areas/${id}`, body);
+  }
+  cambiarEstadoArea(id: number, activo: boolean): Observable<Area> {
+    return this.http.patch<Area>(`${API}/areas/${id}/activo`, {}, { params: new HttpParams().set('activo', activo) });
+  }
+
+  // Pabellones
+  pabellones(): Observable<Pabellon[]> {
+    return this.http.get<Pabellon[]>(`${API}/pabellones`);
+  }
+  crearPabellon(body: PabellonRequest): Observable<Pabellon> {
+    return this.http.post<Pabellon>(`${API}/pabellones`, body);
+  }
+  actualizarPabellon(id: number, body: PabellonRequest): Observable<Pabellon> {
+    return this.http.put<Pabellon>(`${API}/pabellones/${id}`, body);
+  }
+  /** Crea las aulas que le faltan al pabellón para llegar a las que declara (códigos A-01, A-02…). */
+  crearAulasPabellon(id: number, capacidad?: number): Observable<Pabellon> {
+    return this.http.post<Pabellon>(`${API}/pabellones/${id}/aulas`, capacidad ? { capacidad } : {});
+  }
+  /** Fija cuántos alumnos caben en cada aula del pabellón, todo o nada. */
+  fijarCapacidadesPabellon(id: number, aulas: { aulaId: number; capacidad: number }[]): Observable<Aula[]> {
+    return this.http.put<Aula[]>(`${API}/pabellones/${id}/capacidades`, { aulas });
+  }
+  eliminarPabellon(id: number): Observable<void> {
+    return this.http.delete<void>(`${API}/pabellones/${id}`);
+  }
+
+  // Oferta de grados y datos del colegio
+  ofertaGrados(): Observable<GradoOferta[]> {
+    return this.http.get<GradoOferta[]>(`${API}/grados/oferta`);
+  }
+  guardarOfertaGrados(seleccionados: { nivelCodigo: string; numero: number }[]): Observable<GradoOferta[]> {
+    return this.http.put<GradoOferta[]>(`${API}/grados/oferta`, { seleccionados });
+  }
+  colegio(): Observable<Colegio> {
+    return this.http.get<Colegio>(`${API}/colegio`);
+  }
+  guardarColegio(body: ColegioRequest): Observable<Colegio> {
+    return this.http.put<Colegio>(`${API}/colegio`, body);
   }
   crearDocente(body: DocenteRequest): Observable<Docente> {
     return this.http.post<Docente>(`${API}/docentes`, body);

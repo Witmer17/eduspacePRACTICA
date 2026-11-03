@@ -1,4 +1,4 @@
-import { Component, HostListener, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, computed, effect, inject, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
@@ -8,11 +8,21 @@ import { of } from 'rxjs';
 import { AlumnoService } from '../../core/services/alumno.service';
 import { AlumnoResumen } from '../../core/models/alumno.model';
 import { AuthService } from '../../core/services/auth.service';
+import { ArbolEstructuraService, HijoMenu } from '../../core/services/arbol-estructura.service';
 import { NotificacionService } from '../../core/services/notificacion.service';
 import { NAV_AULA, usaBarraAula } from '../aula-nav';
 import { HUBS, hubDe } from '../hubs';
-import { MENU, PERSONAL } from '../menu';
+import { MENU, PERSONAL, usaBarraPersonal } from '../menu';
 import { AvisoServicioComponent } from '../../shared/components/aviso-servicio/aviso-servicio.component';
+
+/** Enlace de la barra superior: con `prefijos` se resalta por rutas (aula); con `hub`, por espacio de trabajo (personal). */
+interface EnlaceSuperior {
+  etiqueta: string;
+  ruta: string;
+  icono: string;
+  prefijos?: string[];
+  hub?: string;
+}
 
 @Component({
   selector: 'app-shell',
@@ -25,7 +35,10 @@ export class ShellComponent {
   private readonly router = inject(Router);
   private readonly notificaciones = inject(NotificacionService);
   private readonly alumnosApi = inject(AlumnoService);
+  private readonly arbolEstructura = inject(ArbolEstructuraService);
   protected readonly noLeidas = this.notificaciones.noLeidas;
+  /** Todos los grados del colegio, por nivel: cuelgan de «Estructura académica» en el menú vertical. */
+  protected readonly arbol = this.arbolEstructura.grupos;
 
   protected readonly menuAbierto = signal(false);
   protected readonly usuario = this.auth.currentUser;
@@ -74,8 +87,48 @@ export class ShellComponent {
     return e.prefijos.some(p => u === p || u.startsWith(p + '/'));
   }
 
+  // --- Barra horizontal superior del personal (ADMIN y SECRETARIA): reemplaza al menú lateral ---
+  protected readonly esPersonal = computed(() => usaBarraPersonal(this.auth.roles()));
+  /** Hay barra superior (en lugar de menú lateral) para el personal y para docentes, alumnos y apoderados. */
+  protected readonly barraSuperior = computed(() => this.esAula() || this.esPersonal());
+
+  /**
+   * Opciones de la barra del personal: Inicio, Personal (personas contratadas, su pago y asistencia, cuentas y roles), Configuración (información del colegio)
+   * y Apertura de periodo (todo lo necesario para abrir un año escolar).
+   * Las demás pantallas siguen existiendo (Ctrl+K y sus rutas); se irán ubicando en el nuevo diseño.
+   */
+  protected readonly navPersonal = computed(() => {
+    const todos = this.menu().flatMap(g => g.items);
+    return [todos.find(i => i.ruta === '/inicio'), todos.find(i => i.hub === 'personal'), todos.find(i => i.hub === 'configuracion'), todos.find(i => i.hub === 'apertura')]
+      .filter((i): i is NonNullable<typeof i> => !!i);
+  });
+
+  /** Enlaces de la barra superior según quién sea la persona. */
+  protected readonly navSuperior = computed<EnlaceSuperior[]>(() => (this.esAula() ? this.navAula() : this.esPersonal() ? this.navPersonal() : []));
+
+  protected activoSuperior(e: EnlaceSuperior): boolean {
+    return e.prefijos ? this.activoAula({ prefijos: e.prefijos }) : this.esActivo(e);
+  }
+
   protected cerrarMenuUsuario(): void {
     this.menuUsuario.set(false);
+  }
+
+  /** Un grado del árbol está abierto cuando la URL es su ruta o cuelga de ella. */
+  protected hijoActivo(h: HijoMenu): boolean {
+    const u = this.url().split(/[?#]/)[0];
+    return u === h.ruta || u.startsWith(h.ruta + '/');
+  }
+
+  /** El árbol se despliega al estar en «Estructura académica» o en cualquiera de sus grados. */
+  protected arbolAbierto(ruta: string): boolean {
+    const u = this.url().split(/[?#]/)[0];
+    return u === ruta || u.startsWith(ruta + '/');
+  }
+
+  /** La opción padre se resalta solo cuando no hay un grado abierto en pantalla (entonces se resalta el grado). */
+  protected padreActivo(ruta: string, activa: string): boolean {
+    return ruta === activa && !this.arbol().some(g => g.hijos.some(h => this.hijoActivo(h)));
   }
 
   // --- Paleta de búsqueda (Ctrl+K): saltar a cualquier pantalla permitida o abrir el expediente de un alumno ---
@@ -104,6 +157,10 @@ export class ShellComponent {
   protected readonly rolPrincipal = computed(() => this.auth.roles().join(' · '));
 
   constructor() {
+    // Al entrar a un espacio que tiene árbol (Configuración), se leen los grados para listarlos bajo «Estructura académica».
+    effect(() => {
+      if (this.hubActual()?.pestanas.some(p => p.conHijos)) untracked(() => this.arbolEstructura.asegurar());
+    });
     // Contador de notificaciones sin leer: al entrar y luego cada minuto. Si falla, el menú sigue funcionando.
     timer(0, 60_000)
       .pipe(

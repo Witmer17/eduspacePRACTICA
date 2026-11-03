@@ -38,6 +38,8 @@ public class UsuarioService {
     private final PasswordEncoder encoder;
     private final RefreshTokenService refresh;
     private final AuthService authService;
+    /** Refleja cada cambio en Keycloak (si está habilitado). Si Keycloak falla, la excepción deshace también el cambio local. */
+    private final KeycloakAdminClient keycloak;
 
     @Transactional(readOnly = true)
     public PageResponse<UsuarioResponse> listar(String texto, String rol, Boolean activo, Pageable pageable) {
@@ -62,6 +64,7 @@ public class UsuarioService {
         Usuario u = usuarios.save(Usuario.builder().username(req.username().trim()).email(req.email().trim())
             .nombres(req.nombres().trim()).apellidos(req.apellidos().trim()).passwordHash(encoder.encode(clave))
             .debeCambiarClave(temporal).roles(resolverRoles(req.roles())).build());
+        keycloak.sincronizar(u, clave);
         return new UsuarioConClaveTemporal(toResponse(u), temporal ? clave : null);
     }
 
@@ -79,6 +82,7 @@ public class UsuarioService {
         Usuario u = usuarios.save(Usuario.builder().username(username).email(email).nombres(req.nombres().trim())
             .apellidos(req.apellidos().trim()).passwordHash(encoder.encode(req.documento().trim()))
             .debeCambiarClave(true).roles(resolverRoles(Set.of(rol))).build());
+        keycloak.sincronizar(u, req.documento().trim());
         log.info("Cuenta creada: usuario={} rol={}", username, rol);
         return new UsuarioConClaveTemporal(toResponse(u), null);
     }
@@ -96,6 +100,9 @@ public class UsuarioService {
         u.setActualizadoEn(LocalDateTime.now());
         usuarios.save(u);
         refresh.revocarTodos(id);
+        keycloak.sincronizar(u, null);
+        keycloak.desbloquear(u);
+        keycloak.restablecerClave(u, req.documento().trim());
         return toResponse(u);
     }
 
@@ -132,7 +139,9 @@ public class UsuarioService {
         u.setNombres(req.nombres().trim());
         u.setApellidos(req.apellidos().trim());
         u.setActualizadoEn(LocalDateTime.now());
-        return toResponse(usuarios.save(u));
+        usuarios.save(u);
+        keycloak.sincronizar(u, null);
+        return toResponse(u);
     }
 
     @Transactional
@@ -144,7 +153,10 @@ public class UsuarioService {
         u.setRoles(nuevos);
         u.setActualizadoEn(LocalDateTime.now());
         refresh.revocarTodos(id);                // el token vigente seguiría con los roles viejos hasta vencer
-        return toResponse(usuarios.save(u));
+        usuarios.save(u);
+        keycloak.sincronizar(u, null);
+        keycloak.cerrarSesiones(u);
+        return toResponse(u);
     }
 
     @Transactional
@@ -154,7 +166,10 @@ public class UsuarioService {
         u.setActivo(activo);
         u.setActualizadoEn(LocalDateTime.now());
         if (!activo) refresh.revocarTodos(id);
-        return toResponse(usuarios.save(u));
+        usuarios.save(u);
+        keycloak.sincronizar(u, null);
+        if (!activo) keycloak.cerrarSesiones(u);
+        return toResponse(u);
     }
 
     @Transactional
@@ -163,7 +178,9 @@ public class UsuarioService {
         u.setBloqueadoHasta(null);
         u.setIntentosFallidos((short) 0);
         u.setActualizadoEn(LocalDateTime.now());
-        return toResponse(usuarios.save(u));
+        usuarios.save(u);
+        keycloak.desbloquear(u);
+        return toResponse(u);
     }
 
     @Transactional
@@ -177,6 +194,9 @@ public class UsuarioService {
         u.setActualizadoEn(LocalDateTime.now());
         usuarios.save(u);
         refresh.revocarTodos(id);
+        keycloak.sincronizar(u, null);
+        keycloak.desbloquear(u);
+        keycloak.restablecerClave(u, clave);
         return new UsuarioConClaveTemporal(toResponse(u), clave);
     }
 

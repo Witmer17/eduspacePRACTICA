@@ -103,6 +103,9 @@ public class AsignacionServiceImpl implements AsignacionService {
         if (docente.getEstado() != EstadoDocente.ACTIVO) {
             throw new BusinessRuleException("El docente " + docente.nombreCompleto() + " está INACTIVO");
         }
+        if (!docente.esDocente()) {
+            throw new BusinessRuleException(docente.nombreCompleto() + " no pertenece al área Docencia, no puede dictar cursos");
+        }
         return docente;
     }
 

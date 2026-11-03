@@ -44,6 +44,16 @@ export class CuentasService {
     );
   }
 
+  /**
+   * Crea la cuenta de una persona del personal (docente, secretaría o caja) y la vincula a su ficha.
+   * El usuario es `nombre.apellido` y la clave inicial su documento, que debe cambiar al entrar.
+   */
+  crearParaPersonal(p: { id: number; nombres: string; apellidos: string; documento: string; email?: string }, rol: 'DOCENTE' | 'SECRETARIA' | 'CAJERO'): Observable<Usuario> {
+    return this.usuarios.crearCuenta({ nombres: p.nombres, apellidos: p.apellidos, documento: p.documento, rol, email: p.email }).pipe(
+      switchMap(r => this.http.patch(VINCULO.DOCENTE(p.id), { usuarioId: r.usuario.id }).pipe(map(() => r.usuario)))
+    );
+  }
+
   /** La clave vuelve a ser el documento y se pide cambiarla al entrar. */
   restablecer(p: PersonaCuenta): Observable<Usuario> {
     return this.usuarios.restablecerPorDocumento(p.usuarioId!, p.documento);

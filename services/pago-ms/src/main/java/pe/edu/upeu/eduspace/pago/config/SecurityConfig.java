@@ -33,6 +33,9 @@ public class SecurityConfig {
                 .requestMatchers("/internal/**").permitAll()
                 .requestMatchers("/api/v1/pagos/alertas/**").hasAnyRole("ADMIN", "SECRETARIA")
                 
+                // Reparto del dinero de caja entre áreas: solo el administrador, también para leer
+                .requestMatchers("/api/v1/pagos/fondo/**").hasRole("ADMIN")
+
                 // Endpoints de caja
                 .requestMatchers(HttpMethod.POST, "/api/v1/pagos/caja/abrir", "/api/v1/pagos/caja/cerrar").hasRole("CAJERO")
                 .requestMatchers(HttpMethod.GET, "/api/v1/pagos/caja/actual").hasRole("CAJERO")

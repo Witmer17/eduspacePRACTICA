@@ -37,7 +37,7 @@ import { ModalComponent } from '../../shared/components/modal/modal.component';
           <label for="sf-aula">Aula</label>
           <select id="sf-aula" formControlName="aulaId">
             <option [ngValue]="0">Sin aula</option>
-            @for (a of aulas(); track a.id) { <option [ngValue]="a.id">{{ a.codigo }} · {{ a.nombre }} (cap. {{ a.capacidad }})</option> }
+            @for (a of aulas(); track a.id) { <option [ngValue]="a.id">{{ a.pabellonNombre ? 'Pab. ' + a.pabellonNombre + ' · ' : '' }}{{ a.codigo }} · {{ a.nombre }} (cap. {{ a.capacidad }})</option> }
           </select>
         </div>
         <div class="field">

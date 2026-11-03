@@ -41,8 +41,13 @@
   </div>
 
   @if (anioSel(); as a) {
-    <app-page-header [titulo]="'Periodos de ' + a.nombre" subtitulo="Bimestres o trimestres en que se divide el año.">
-      @if (puedeEditar()) { <button type="button" class="btn btn-primary" [disabled]="a.estado === 'CERRADO'" (click)="nuevoPeriodo()">Nuevo periodo</button> }
+    <app-page-header [titulo]="'Periodos de ' + a.nombre" subtitulo="Bimestres, trimestres o semestres en que se divide el año. Elige el régimen y las fechas se reparten solas.">
+      @if (puedeEditar()) {
+        <button type="button" class="btn" [disabled]="a.estado === 'CERRADO' || !sePuedeRedefinir()" [title]="sePuedeRedefinir() ? '' : 'Hay periodos que ya empezaron: no se pueden rehacer'" (click)="definirPeriodos()">
+          {{ periodos().length ? 'Cambiar régimen' : 'Definir periodos' }}
+        </button>
+        <button type="button" class="btn btn-primary" [disabled]="a.estado === 'CERRADO'" (click)="nuevoPeriodo()">Nuevo periodo</button>
+      }
     </app-page-header>
     <div class="card">
       <div class="table-wrap">
@@ -99,6 +104,39 @@
     <ng-container footer>
       <button type="button" class="btn" (click)="cerrar()">Cancelar</button>
       <button type="submit" form="form-anio" class="btn btn-primary" [disabled]="guardando()">{{ guardando() ? 'Guardando…' : 'Guardar' }}</button>
+    </ng-container>
+  </app-modal>
+}
+
+@if (dialogo() === 'regimen') {
+  <app-modal [titulo]="'Periodos de ' + (anioSel()?.nombre ?? '')" [ancho]="560" (cerrar)="cerrar()">
+    <div class="regimenes" role="radiogroup" aria-label="Régimen de periodos">
+      @for (r of regimenes; track r.id) {
+        <button type="button" role="radio" class="regimen" [class.on]="regimen() === r.id" [attr.aria-checked]="regimen() === r.id" (click)="regimen.set(r.id)">
+          <strong>{{ r.etiqueta }}</strong><span>{{ r.ayuda }}</span>
+        </button>
+      }
+    </div>
+    @if (propuesta().length) {
+      <div class="table-wrap" style="margin-top: 16px">
+        <table class="table">
+          <thead><tr><th>N.º</th><th>Periodo</th><th>Inicio</th><th>Fin</th></tr></thead>
+          <tbody>
+            @for (p of propuesta(); track p.numero) {
+              <tr><td>{{ p.numero }}</td><td><strong>{{ p.nombre }}</strong></td><td>{{ p.fechaInicio | date: 'dd/MM/yyyy' }}</td><td>{{ p.fechaFin | date: 'dd/MM/yyyy' }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin: 10px 0 0">Las fechas cubren el año completo ({{ anioSel()?.fechaInicio | date: 'dd/MM/yyyy' }} al {{ anioSel()?.fechaFin | date: 'dd/MM/yyyy' }}). Después puedes ajustar cada periodo con «Editar».</p>
+      @if (periodos().length) { <div class="aviso aviso-warn" style="margin-top: 12px">Los {{ periodos().length }} periodos actuales (aún sin empezar) se reemplazarán por estos.</div> }
+    } @else {
+      <div class="aviso aviso-warn" style="margin-top: 16px">Revisa las fechas del año: deben ser válidas y alcanzar para los periodos elegidos.</div>
+    }
+    @if (errorForm()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorForm() }}</div> }
+    <ng-container footer>
+      <button type="button" class="btn" (click)="cerrar()">Cancelar</button>
+      <button type="button" class="btn btn-primary" [disabled]="guardando() || propuesta().length === 0" (click)="crearPeriodosDelRegimen()">{{ guardando() ? 'Creando…' : 'Crear ' + propuesta().length + ' periodos' }}</button>
     </ng-container>
   </app-modal>
 }

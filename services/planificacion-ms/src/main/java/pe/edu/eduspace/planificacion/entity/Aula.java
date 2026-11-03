@@ -18,4 +18,8 @@ public class Aula {
     private TipoAula tipo = TipoAula.AULA;
     private Short capacidad;
     private Boolean activo = true;
+    /** Pabellón al que pertenece (opcional). */
+    @ManyToOne
+    @JoinColumn(name = "pabellon_id")
+    private Pabellon pabellon;
 }

@@ -23,6 +23,14 @@ export const DOCENTE = ['DOCENTE'];
 export const FAMILIA = ['APODERADO', 'ALUMNO'];
 export const TODOS = ['ADMIN', 'SECRETARIA', 'DOCENTE', 'APODERADO', 'ALUMNO', 'CAJERO'];
 
+/**
+ * El personal administrativo (solo ADMIN y/o SECRETARIA) navega con una barra horizontal superior: Inicio y los espacios de trabajo.
+ * Quien además tiene otro rol (docente, caja…) mantiene el menú lateral, que sí reúne todos sus grupos.
+ */
+export function usaBarraPersonal(roles: readonly string[]): boolean {
+  return roles.length > 0 && roles.every(r => PERSONAL.includes(r));
+}
+
 /** Entrada del menú que abre un espacio de trabajo: va a su primera pestaña y se resalta con cualquiera de ellas. */
 function entradaHub(id: string): ItemMenu {
   const hub = HUBS.find(h => h.id === id)!;
@@ -44,6 +52,7 @@ export const MENU: GrupoMenu[] = [
     items: [
       { etiqueta: 'Inicio', ruta: '/inicio', icono: 'M3 11l9-8 9 8M5 10v10h14V10', roles: PERSONAL },
       { etiqueta: 'Notificaciones', ruta: '/notificaciones', icono: 'M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 004 0', roles: TODOS, conContador: true },
+      { etiqueta: 'Mi trabajo', ruta: '/mi-trabajo', icono: 'M3 7h18v13H3zM8 7V4h8v3M3 13h18', roles: ['DOCENTE', 'CAJERO'] },
       { etiqueta: 'Calendario', ruta: '/calendario', icono: 'M4 5h16v15H4zM4 10h16M9 3v4M15 3v4', roles: TODOS },
       { etiqueta: 'Ayuda', ruta: '/ayuda', icono: 'M12 17h.01M9.5 9a2.5 2.5 0 115 0c0 1.5-2.5 2-2.5 4M21 12a9 9 0 11-18 0 9 9 0 0118 0', roles: TODOS },
       { etiqueta: 'Mi perfil', ruta: '/mi-perfil', icono: 'M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z', roles: TODOS }
@@ -86,13 +95,12 @@ export const MENU: GrupoMenu[] = [
       entradaHub('aulas'),
       entradaHub('cursos'),
       entradaHub('horarios'),
-      entradaHub('anio'),
       entradaHub('seguimiento'),
       entradaHub('finanzas')
     ]
   },
   {
     titulo: 'Administración',
-    items: [entradaHub('administracion')]
+    items: [entradaHub('personal'), entradaHub('configuracion'), entradaHub('apertura'), entradaHub('administracion')]
   }
 ];

@@ -51,7 +51,8 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       // los errores de nuestros servicios): también cuenta como servicio caído.
       const crudo500 = error.status === 500 && typeof error.error?.mensaje !== 'string';
       if (esApiPropia(req.url) && ([0, 502, 503, 504].includes(error.status) || crudo500)) estado.marcarCaido(req.url);
-      if (error.status === 401 && !publica) {
+      // estado-clave es una consulta accesoria justo tras el login: si auth-ms no acepta el token, no se cierra la sesión por eso.
+      if (error.status === 401 && !publica && !/\/api\/v1\/auth\/estado-clave$/.test(req.url)) {
         if (auth.puedeRenovar()) {
           // Access token vencido: se renueva una vez y se repite la petición original. Solo si la RENOVACIÓN falla
           // la sesión terminó; si la repetición vuelve a dar 401, es el servicio quien rechaza el token (p. ej. auth-ms con

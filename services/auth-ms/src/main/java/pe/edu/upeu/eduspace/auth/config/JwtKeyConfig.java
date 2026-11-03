@@ -118,10 +118,25 @@ public class JwtKeyConfig {
         return new NimbusJwtEncoder(new ImmutableJWKSet<SecurityContext>(new JWKSet(claveActual)));
     }
 
-    /** Valida los tokens propios (endpoints autenticados de auth-ms, p. ej. cambiar-clave) con las claves públicas. */
+    /**
+     * Valida los tokens de los endpoints autenticados de auth-ms (cambiar-clave, estado-clave, usuarios): primero con la clave propia y,
+     * si {@code app.auth.keycloak-admin.aceptar-tokens} está activo, con el JWKS de Keycloak (el frontend en modo Keycloak los envía).
+     */
     @Bean
-    public JwtDecoder jwtDecoder(RSAKey claveActual) throws Exception {
-        return NimbusJwtDecoder.withPublicKey(claveActual.toRSAPublicKey()).build();
+    public JwtDecoder jwtDecoder(RSAKey claveActual, AuthProperties props) throws Exception {
+        JwtDecoder propio = NimbusJwtDecoder.withPublicKey(claveActual.toRSAPublicKey()).build();
+        var kc = props.getKeycloakAdmin();
+        if (!kc.isAceptarTokens()) return propio;
+        String jwks = kc.getBaseUrl().replaceAll("/+$", "") + "/realms/" + kc.getRealm() + "/protocol/openid-connect/certs";
+        JwtDecoder keycloak = NimbusJwtDecoder.withJwkSetUri(jwks).build();
+        log.info("auth-ms acepta también tokens de Keycloak (JWKS {})", jwks);
+        return token -> {
+            try {
+                return propio.decode(token);
+            } catch (org.springframework.security.oauth2.jwt.JwtException e) {
+                return keycloak.decode(token);
+            }
+        };
     }
 
     private static byte[] leerPem(String ruta) throws IOException {

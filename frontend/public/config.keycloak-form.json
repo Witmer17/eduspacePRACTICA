@@ -1,0 +1,4 @@
+{
+  "authMode": "keycloak-form",
+  "keycloak": { "url": "/kc", "realm": "eduspace", "clientId": "eduspace-web", "clientIdFormulario": "eduspace-web-form" }
+}
