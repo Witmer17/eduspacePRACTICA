@@ -35,7 +35,7 @@ export const APP_CONFIG = new InjectionToken<AppConfig>('APP_CONFIG', {
 /** Lee `config.json` (junto a index.html) para poder cambiar de emisor sin recompilar. Si falta, usa el login propio. */
 export async function cargarConfig(): Promise<AppConfig> {
   try {
-    const res = await fetch('config.json', { cache: 'no-store' });
+    const res = await fetch('/config.json?v=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) {
       return CONFIG_POR_DEFECTO;
     }

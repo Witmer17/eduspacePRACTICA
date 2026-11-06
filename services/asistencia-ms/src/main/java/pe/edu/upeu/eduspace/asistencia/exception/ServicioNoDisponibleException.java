@@ -1,8 +1,0 @@
-package pe.edu.upeu.eduspace.asistencia.exception;
-
-/** Un servicio del que depende la operación no responde (se mapea a 503). */
-public class ServicioNoDisponibleException extends RuntimeException {
-    public ServicioNoDisponibleException(String mensaje) {
-        super(mensaje);
-    }
-}

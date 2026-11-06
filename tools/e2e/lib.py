@@ -52,7 +52,7 @@ def call(svc, method, path, who=ADM, body=None, expect=None, raw=False):
     return js
 FAILS = []
 def topic(t, n=50):
-    out = subprocess.run(['podman','exec','e2e-kafka','/opt/kafka/bin/kafka-console-consumer.sh','--bootstrap-server','localhost:9092',
+    out = subprocess.run([os.environ.get('CONTENEDORES', 'docker'),'exec','e2e-kafka','/opt/kafka/bin/kafka-console-consumer.sh','--bootstrap-server','localhost:9092',
         '--topic',t,'--from-beginning','--timeout-ms','4000'], capture_output=True, text=True).stdout.strip().splitlines()
     return [json.loads(l) for l in out if l.startswith('{')]
 def esperar(fn, msg, seg=40):

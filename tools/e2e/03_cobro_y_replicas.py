@@ -22,7 +22,7 @@ if pens:
     print('  ', [(c['descripcion'], c['montoBase'], c['fechaVencimiento']) for c in ps][:3], '...', ps[-1]['fechaVencimiento'])
     check(sum(c['montoBase'] for c in ps)==2500, 'pensiones suman 2500')
 print('== comprobantes en BD (sin duplicados)')
-out = subprocess.run(['podman','exec','e2e-pg-pago','psql','-U','eduspace','-d','pago_db','-tAc','select count(*), max(numero) from comprobantes'],capture_output=True,text=True).stdout.strip()
+out = subprocess.run([os.environ.get('CONTENEDORES', 'docker'),'exec','e2e-pg-pago','psql','-U','eduspace','-d','pago_db','-tAc','select count(*), max(numero) from comprobantes'],capture_output=True,text=True).stdout.strip()
 check(out=='1|1', f'1 comprobante y numero 1 (obtenido {out})')
 print('== eventos')
 for t in ['pago.confirmado','matricula.confirmada']:
@@ -30,7 +30,7 @@ for t in ['pago.confirmado','matricula.confirmada']:
 check(any(e.get('conceptoTipo')=='MATRICULA' and 'payload' not in e for e in topic('pago.confirmado')), 'pago.confirmado plano con conceptoTipo')
 print('== asistencia/tareas/examenes/calificaciones reciben la réplica')
 for db,tabla in [('asistencia','matriculas_local'),('tareas','matriculas_local'),('examenes','matriculas_local'),('calificaciones','matriculas_local')]:
-    n = esperar(lambda: subprocess.run(['podman','exec',f'e2e-pg-{db}','psql','-U','eduspace','-d',f'{db}_db','-tAc',f"select count(*)||':'||string_agg(estado,',') from {tabla}"],capture_output=True,text=True).stdout.strip(), f'réplica {db}')
+    n = esperar(lambda: subprocess.run([os.environ.get('CONTENEDORES', 'docker'),'exec',f'e2e-pg-{db}','psql','-U','eduspace','-d',f'{db}_db','-tAc',f"select count(*)||':'||string_agg(estado,',') from {tabla}"],capture_output=True,text=True).stdout.strip(), f'réplica {db}')
     print('  ', db, n)
 check(all(c['alumnoId']==1 for c in call('pago','GET','/api/v1/pagos/cuotas?alumnoId=1&size=50', CAJ)['contenido']), 'el filtro alumnoId devuelve solo cuotas del alumno')
 print('== matricula 2: se paga y se aprueba también')

@@ -71,7 +71,7 @@ eduspace:
   gateway:
     cors:
       # DEV: la web también se abre desde otros equipos de la red local, por IP o por nombre del equipo (http://<host>:4200); en PROD el valor es obligatorio y exacto.
-      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5000,http://*:4200}
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://127.0.0.1:4200,http://localhost:5000,http://*:4200}
     actuator-public: true     # DEV: Prometheus local raspa sin token
     rate-limit:
       enabled: true
