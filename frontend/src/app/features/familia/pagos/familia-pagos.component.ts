@@ -9,13 +9,14 @@ import { ModalComponent } from '../../../shared/components/modal/modal.component
 import { PageHeaderComponent } from '../../../shared/components/page-header/page-header.component';
 import { SelectorHijoComponent } from '../../../shared/components/selector-hijo/selector-hijo.component';
 import { uuid } from '../../../core/utils/uuid';
+import { MatriculaPagoComponent } from './matricula-pago.component';
 
 const CLASE: Record<EstadoCuota, string> = { PENDIENTE: 'badge-warn', PARCIAL: 'badge-violet', PAGADA: 'badge-ok', VENCIDA: 'badge-danger', ANULADA: 'badge-gray' };
 const PAGABLES: EstadoCuota[] = ['PENDIENTE', 'VENCIDA', 'PARCIAL'];
 
 @Component({
   selector: 'app-familia-pagos',
-  imports: [DatePipe, DecimalPipe, ModalComponent, PageHeaderComponent, SelectorHijoComponent],
+  imports: [DatePipe, DecimalPipe, ModalComponent, PageHeaderComponent, SelectorHijoComponent, MatriculaPagoComponent],
   templateUrl: './familia-pagos.component.html'
 })
 export class FamiliaPagosComponent implements OnInit {
@@ -27,7 +28,21 @@ export class FamiliaPagosComponent implements OnInit {
   protected readonly cargando = signal(true);
   protected readonly elegidas = signal<Set<number>>(new Set());
 
-  protected readonly pagables = computed(() => (this.cuenta()?.cuotas ?? []).filter(c => PAGABLES.includes(c.estado)));
+  /** Lo que el apoderado pagó y caja aún no aprueba, o rechazó (con motivo). */
+  private readonly enviados = signal<Pago[]>([]);
+  private readonly alumnoId = computed(() => this.ctx.seleccionado()?.alumnoId);
+  /** Cuotas del hijo elegido con un pago en revisión: no se pueden volver a pagar hasta que caja responda. */
+  private readonly cuotasEnRevision = computed(() => new Set(
+    this.enviados().filter(p => p.estado === 'PENDIENTE' && p.alumnoId === this.alumnoId()).flatMap(p => p.detalles.map(d => d.cuotaId))
+  ));
+  protected readonly enRevision = computed(() => this.enviados().filter(p => p.estado === 'PENDIENTE' && p.alumnoId === this.alumnoId()));
+  /** Rechazos recientes (14 días) del hijo elegido, para que el apoderado vea el motivo y vuelva a pagar. */
+  protected readonly rechazados = computed(() => {
+    const limite = Date.now() - 14 * 86_400_000;
+    return this.enviados().filter(p => p.estado === 'RECHAZADO' && p.alumnoId === this.alumnoId() && new Date(p.aprobadoEn ?? p.pagadoEn).getTime() >= limite);
+  });
+  /** La cuota de matrícula no se elige aquí: se paga arriba, con su orden (el servidor también lo exige). */
+  protected readonly pagables = computed(() => (this.cuenta()?.cuotas ?? []).filter(c => PAGABLES.includes(c.estado) && !this.cuotasEnRevision().has(c.id) && c.conceptoTipo !== 'MATRICULA'));
   protected readonly totalElegido = computed(() => this.pagables().filter(c => this.elegidas().has(c.id)).reduce((s, c) => s + c.saldo, 0));
 
   protected readonly confirmando = signal(false);
@@ -46,14 +61,28 @@ export class FamiliaPagosComponent implements OnInit {
 
   ngOnInit(): void {
     this.ctx.cargar().subscribe({ error: e => this.avisos.error(mensajeError(e)) });
+    this.cargarEnviados();
+  }
+
+  private cargarEnviados(): void {
+    this.api.misPendientes().subscribe({ next: l => this.enviados.set(l), error: () => this.enviados.set([]) });
   }
 
   protected clase(e: EstadoCuota): string {
     return CLASE[e];
   }
 
-  protected pagable(e: EstadoCuota): boolean {
-    return PAGABLES.includes(e);
+  protected pagable(c: { id: number; estado: EstadoCuota }): boolean {
+    return PAGABLES.includes(c.estado) && !this.cuotasEnRevision().has(c.id) && !this.esMatricula(c.id);
+  }
+
+  private esMatricula(cuotaId: number): boolean {
+    return this.cuenta()?.cuotas.find(c => c.id === cuotaId)?.conceptoTipo === 'MATRICULA';
+  }
+
+  /** ¿La cuota tiene un pago esperando la aprobación de caja? */
+  protected enCaja(id: number): boolean {
+    return this.cuotasEnRevision().has(id);
   }
 
   private cargar(alumnoId?: number): void {
@@ -100,7 +129,10 @@ export class FamiliaPagosComponent implements OnInit {
 
   protected cerrar(): void {
     this.confirmando.set(false);
-    if (this.recibo()) this.cargar(this.ctx.seleccionado()?.alumnoId);
+    if (this.recibo()) {
+      this.cargar(this.ctx.seleccionado()?.alumnoId);
+      this.cargarEnviados();
+    }
   }
 
   protected pagar(): void {
@@ -115,7 +147,7 @@ export class FamiliaPagosComponent implements OnInit {
         next: p => {
           this.pagando.set(false);
           this.recibo.set(p);
-          this.avisos.success('Pago registrado. Te enviamos el comprobante.');
+          this.avisos.success('Pago enviado. Caja lo revisa y te llegará el comprobante al aprobarlo.');
         },
         error: e => {
           this.pagando.set(false);

@@ -15,6 +15,8 @@ public class EstadoCuentaResponse {
     private BigDecimal totalCobrado;
     private BigDecimal totalPendiente;
     private BigDecimal totalVencido;
+    /** El crédito (saldo a favor) del alumno: lo depositado que aún no se cobró de sus cuotas. */
+    private BigDecimal credito;
     private List<CuotaResponse> cuotas;
 }
 

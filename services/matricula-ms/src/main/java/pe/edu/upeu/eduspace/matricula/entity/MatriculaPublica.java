@@ -75,6 +75,16 @@ public class MatriculaPublica {
     @Column(name = "correo_estado", length = 12)
     private String correoEstado;
 
+    /**
+     * Si la familia pidió descuento por hermano: el documento que escribió y, si ya es alumno del colegio, su nombre (la solicitud vive en pago-ms
+     * y la secretaría confirma el parentesco antes de que se pueda pagar).
+     */
+    @Column(name = "hermano_documento", length = 20)
+    private String hermanoDocumento;
+
+    @Column(name = "hermano_nombre", length = 220)
+    private String hermanoNombre;
+
     @Builder.Default
     @Column(name = "creado_en", nullable = false)
     private LocalDateTime creadoEn = LocalDateTime.now();

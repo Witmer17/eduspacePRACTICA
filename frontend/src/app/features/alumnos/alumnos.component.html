@@ -16,7 +16,7 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Código</th><th>Alumno</th><th>Documento</th><th>Estado</th><th></th></tr>
+          <tr><th>Código</th><th>Alumno</th><th>Documento</th><th>Estado</th><th>Matrícula{{ anioActivo() ? ' ' + anioActivo()!.nombre : '' }}</th><th></th></tr>
         </thead>
         <tbody>
           @for (a of alumnos(); track a.id) {
@@ -25,10 +25,24 @@
               <td><strong>{{ a.nombreCompleto }}</strong></td>
               <td>{{ a.tipoDocumento ?? 'DNI' }} {{ a.numeroDocumento }}</td>
               <td><span [class]="'badge ' + clase(a.estado)">{{ a.estado }}</span></td>
-              <td class="acciones"><a class="btn btn-sm" [routerLink]="['/alumnos', a.id]">Ver expediente</a></td>
+              <td>
+                @if (!matriculaCargada()) { <span class="muted">…</span> }
+                @else if (!anioActivo()) { <span class="muted" title="No hay un periodo activo">—</span> }
+                @else { <span [class]="'badge ' + claseSituacion[situacion(a)]">{{ textoSituacion[situacion(a)] }}</span> }
+              </td>
+              <td class="acciones">
+                @if (matriculaCargada() && situacion(a) === 'SIN_MATRICULA') {
+                  @if (opcionMatricular(a).puede) {
+                    <a class="btn btn-sm btn-primary" routerLink="/matricula/asistente" [queryParams]="{ alumnoId: a.id }" [attr.aria-label]="'Matricular a ' + a.nombreCompleto" title="Abre el asistente de matrícula">Matricular</a>
+                  } @else {
+                    <button type="button" class="btn btn-sm btn-primary" disabled [title]="opcionMatricular(a).motivo ?? ''" [attr.aria-label]="'Matricular a ' + a.nombreCompleto">Matricular</button>
+                  }
+                }
+                <a class="btn btn-sm" [routerLink]="['/alumnos', a.id]">Ver expediente</a>
+              </td>
             </tr>
           } @empty {
-            <tr><td colspan="5" class="vacio">{{ cargando() ? 'Cargando…' : 'No hay alumnos con esa búsqueda.' }}</td></tr>
+            <tr><td colspan="6" class="vacio">{{ cargando() ? 'Cargando…' : 'No hay alumnos con esa búsqueda.' }}</td></tr>
           }
         </tbody>
       </table>
@@ -178,9 +192,13 @@
 
       @if (errorForm()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorForm() }}</div> }
     </form>
+    <label class="casilla-matricular" for="matricular-ahora">
+      <input id="matricular-ahora" type="checkbox" [formControl]="matricularAhora" />
+      <span><strong>Matricularlo ahora</strong><small>Al guardar sigue el asistente de matrícula: documentos, grado y sección.</small></span>
+    </label>
     <ng-container footer>
       <button type="button" class="btn" (click)="cerrar()">Cancelar</button>
-      <button type="submit" form="form-alumno" class="btn btn-primary" [disabled]="guardando()">{{ guardando() ? 'Guardando…' : 'Registrar alumno' }}</button>
+      <button type="submit" form="form-alumno" class="btn btn-primary" [disabled]="guardando()">{{ guardando() ? 'Guardando…' : matricularAhora.value ? 'Registrar y matricular' : 'Registrar alumno' }}</button>
     </ng-container>
   </app-modal>
 }

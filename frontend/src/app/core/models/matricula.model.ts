@@ -3,6 +3,19 @@ export type TipoMatricula = 'NUEVA' | 'RATIFICACION' | 'REINGRESO';
 export type EstadoCampania = 'PLANIFICADA' | 'ABIERTA' | 'CERRADA';
 export type TipoRequisito = 'FICHA_FIRMADA' | 'CONSTANCIA_NO_ADEUDO' | 'CERTIFICADO_ESTUDIOS' | 'EXPEDIENTE_COMPLETO';
 
+/** Forma de pago de las pensiones que se acuerda al matricular. Semestral y anual llevan descuento (lo define el servidor). */
+export type PlanPago = 'MENSUAL' | 'BIMESTRAL' | 'SEMESTRAL' | 'ANUAL';
+
+/** Una forma de pago con su descuento, tal como la configura el servidor. */
+export interface OpcionPlanPago {
+  id: PlanPago;
+  etiqueta: string;
+  /** Porcentaje de descuento sobre la pensión (0 si no lleva). */
+  descuentoPorcentaje: number;
+  /** Cuántas cuotas salen en una tarifa de 10 meses. */
+  cuotasEnDiezMeses: number;
+}
+
 export const ESTADOS_MATRICULA: EstadoMatricula[] = ['PRE_MATRICULA', 'POR_APROBAR', 'MATRICULADO', 'RETIRADO', 'TRASLADADO', 'ANULADO'];
 export const TIPOS_MATRICULA: TipoMatricula[] = ['NUEVA', 'RATIFICACION', 'REINGRESO'];
 
@@ -28,6 +41,8 @@ export interface Matricula {
   confirmadaEn?: string;
   cerradaEn?: string;
   motivoCierre?: string;
+  /** Forma de pago de las pensiones acordada al matricular (mensual si no se eligió). */
+  planPago?: PlanPago;
 }
 
 export interface MatriculaCreate {
@@ -35,6 +50,7 @@ export interface MatriculaCreate {
   seccionId: number;
   tipo: TipoMatricula;
   observaciones?: string;
+  planPago?: PlanPago;
 }
 
 export interface Requisito {

@@ -46,7 +46,7 @@ export class CierrePeriodoComponent implements OnInit {
   ngOnInit(): void {
     this.plan.anios().subscribe(a => {
       this.anios.set(a);
-      this.filtro.patchValue({ anioId: (a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0 });
+      this.filtro.patchValue({ anioId: a.find(x => x.estado === 'ACTIVO')?.id ?? 0 });
       this.alCambiarAnio();
     });
   }
@@ -60,7 +60,7 @@ export class CierrePeriodoComponent implements OnInit {
       this.periodos.set(periodos);
       this.secciones.set(secciones);
       this.filtro.patchValue({
-        periodoId: (periodos.find(x => x.estado === 'ACTIVO') ?? periodos[0])?.id ?? 0,
+        periodoId: periodos.find(x => x.estado === 'ACTIVO')?.id ?? 0,
         seccionId: secciones[0]?.id ?? 0
       });
       this.cargar();

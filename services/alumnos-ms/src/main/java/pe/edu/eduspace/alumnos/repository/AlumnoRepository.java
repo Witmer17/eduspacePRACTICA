@@ -43,6 +43,9 @@ public interface AlumnoRepository extends JpaRepository<Alumno, Long> {
 
     Optional<Alumno> findByUsuarioId(Long usuarioId);
 
+    /** Para ubicar a un hermano por su documento (matrícula en línea); si el mismo número existiera con otro tipo, vale el más antiguo. */
+    Optional<Alumno> findFirstByNumeroDocumentoOrderByIdAsc(String numeroDocumento);
+
     List<Alumno> findByIdIn(Collection<Long> ids);
 
     /** Último código generado con ese prefijo (comparación de texto: los correlativos son de ancho fijo). */

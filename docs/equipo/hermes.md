@@ -4,7 +4,7 @@ Servicios a cargo: **`planificacion-ms`**, **`alumnos-ms`**, **`notificaciones-m
 Son la base del sistema: planificación es la *fuente de verdad* del año escolar (casi todos los demás la consultan), alumnos guarda el
 expediente de cada persona y notificaciones es el único servicio que habla con las familias.
 
-Pruebas automáticas aproximadas: planificación 48 · alumnos 38 · notificaciones 36.
+Pruebas automáticas aproximadas: planificación 68 · alumnos 38 · notificaciones 36. *(Actualizado al 2026-11-03.)*
 
 ---
 
@@ -26,10 +26,16 @@ qué cursos se dictan en cada grado, qué docente dicta cada curso en cada secci
 | Horarios | Clases por sección; rechaza choques de docente, aula y sección; publicación versionada | `horarios/seccion/{id}`, `horarios/docente/{id}`, `horarios/anio/{id}`, `horarios` (POST/PUT/DELETE), `horarios/validar/{id}`, `horarios/publicar/seccion/{id}` |
 | **Armado automático** | Genera el horario de varias secciones a la vez sin cruces | `GET horarios/preparacion`, `POST horarios/generar` (con `simular=true` no guarda) |
 | Feriados | Días no hábiles (los usa asistencia) | `feriados`, `feriados/es-habil` |
+| Colegio y pabellones | Datos del colegio (ficha única) y pabellones donde se agrupan las aulas | `colegio`, `pabellones` (CRUD) |
+| Áreas de trabajo | Áreas del personal (Docencia, administración…); cada persona pertenece a una | `areas` (CRUD) |
+| Personal, contratos y pagos | Contrato por persona (renovar, rescindir), pagos, planilla mensual, cuentas de depósito. Solo ADMIN | `rrhh/contratos`, `rrhh/pagos`, `rrhh/planilla/{AAAA-MM}`, `rrhh/cuentas` |
+| Asistencia del personal | Una marca por persona y día; ADMIN y SECRETARIA | `asistencia-personal` (GET rango, `PUT /dia`) |
+| Mi trabajo | Lo propio de quien inicia sesión (contrato, pagos, asistencia, cuenta). Solo lectura | `mi-personal`, `/contratos`, `/pagos`, `/cuentas`, `/asistencia` |
 | Internos | Para otros servicios (con `X-Service-Token`) | `/internal/secciones`, `/internal/anios/activo`, `/internal/periodos`, `/internal/cursos`, `/internal/docentes/usuario/{id}/asignaciones`, `/internal/asignaciones/validar` |
 
 **Tablas:** `anios_academicos`, `periodos`, `niveles`, `grados`, `secciones`, `aulas`, `cursos`, `grado_cursos` (malla), `docentes`, `asignaciones`,
-`bloques_horarios`, `horarios`, `publicaciones_horario`, `feriados`, `outbox_eventos`.
+`bloques_horarios`, `horarios`, `publicaciones_horario`, `feriados`, `outbox_eventos`, y desde las migraciones nuevas: `areas`, `colegio`, `pabellones`, `docente_cursos`,
+`contratos_personal`, `pagos_personal`, `asistencia_personal`, `cuentas_deposito_personal`.
 
 **Eventos que publica:** `horario.publicado`, `anio.activado`, `periodo.cambiado` (estos dos aún no los consume nadie). **No consume ninguno.**
 
@@ -38,17 +44,37 @@ qué cursos se dictan en cada grado, qué docente dicta cada curso en cada secci
 - Una sección no se crea repetida (año + grado + letra), no admite un tutor que no sea docente activo, ni se elimina si tiene cursos asignados; un año CERRADO es de solo lectura.
 - Permisos: horarios, asignaciones y docentes los edita ADMIN y SECRETARIA; el resto de planificación solo ADMIN.
 
+**Personal, contratos y pagos (nuevo).**
+- *Áreas y cursos del docente.* Cada persona del personal pertenece a un área (V4); solo Docencia puede tener cursos (`docente_cursos`, V7; `cursoIds` en la ficha: `null` = no tocar, `[]` = quitar; otra área con cursos → 409). Los cursos elegidos mandan sobre la especialidad escrita en el armado automático.
+- *Contratos (V8).* Un solo contrato vigente por persona; para continuar se **renueva** (inicio = fin anterior + 1 día, hereda tipo, cargo y sueldo; solo el último no rescindido con fin). No se cruzan fechas; el fin es obligatorio salvo INDEFINIDO; un contrato rescindido no se edita. Quien tiene contratos, pagos o asistencia se da de baja, no se borra.
+- *Pagos y planilla.* `planilla/{AAAA-MM}` genera **un** sueldo pendiente por persona y mes (el contrato que cubre más días, sin duplicar); descuentos y adelantos restan; un pago ya pagado no se borra.
+- *Cuentas de depósito (V10).* Varias por persona, una sola principal (la primera; si se quita, se promueve la más antigua); banco con cuenta de 8–20 dígitos y CCI de 20, o billetera Yape/Plin con celular de 9 dígitos; sin duplicados.
+- *Asistencia (V9).* Una fila por persona y día; el registro del día es todo o nada; FALTA/JUSTIFICADA/PERMISO no llevan horas; no admite fechas futuras ni personas de baja.
+- *Mi trabajo.* La persona sale **siempre** del claim `usuarioId` del JWT, nunca de un parámetro; 404 si la cuenta no tiene ficha. Roles ADMIN, SECRETARIA, DOCENTE y CAJERO.
+- *Permisos.* `rrhh/**` solo ADMIN (también lectura); `asistencia-personal` ADMIN y SECRETARIA; reglas explícitas en `SecurityConfig` antes de la regla general de GET.
+- *Descuento por inasistencias (en el frontend, `rrhh.ts`).* Valor del día = sueldo ÷ días reales del mes; faltas sin justificar + 1 día por cada 8 tardanzas, con tope en el sueldo; justificadas y permisos no descuentan.
+
 **Armado automático (trabajo reciente).** `horario/PlanificadorHorario` resuelve el problema por secciones: cada clase ocupa un espacio día × bloque; las
 restricciones duras (docente, aula, sección libres) nunca se violan; usa un orden por dificultad (MRV) con búsqueda local y lista tabú, con semilla fija
 (2026) para que el resultado sea repetible. `HorarioGeneradorServiceImpl` prepara el problema, asigna docentes por especialidad si se pide
 (`asignarDocentes`) y guarda; la *simulación* usa el mismo código y hace `setRollbackOnly`. Resultado en Primaria: 12 secciones, 288 clases, 0 cruces.
 Pruebas: `PlanificadorHorarioTest`, `AsignacionPorEspecialidadTest`.
 
-**Pantallas del frontend relacionadas** (espacios *Aulas y secciones*, *Cursos y docentes*, *Horarios*, *Año escolar*):
-Panel de aulas · Secciones · Aulas físicas · Panel de cursos · Cursos · Malla curricular · Docentes · Asignaciones · Armado automático ·
-Horario por sección · Aulas disponibles · Bloques horarios · Años y periodos · Feriados. Código en `frontend/src/app/features/planificacion/` y `…/dashboard/`.
+**Horario del docente (nuevo, solo frontend).** *Configuración → Personal → Horario del docente* (`/configuracion/horarios`, ADMIN y SECRETARIA): lista de docentes con su avance
+(«Sin horario», «Incompleto», «Completo», «N de M h») y su semana en una grilla de rectángulos por turno. Se seleccionan rectángulos vacíos y se pone una clase de un curso que el
+docente ya tiene o se le asigna un curso nuevo en el mismo paso. Usa las mismas APIs y tabla que «Horario por sección» (no hubo cambios de backend) y bloquea de antemano lo que el servidor
+rechazaría (turno, sección ocupada, horas completas). Código en `features/configuracion/horarios/`. No arrastra clases ni publica el horario.
 
-**Migraciones:** `V1` (esquema), `V3__grados_inicial_por_edad.sql` (nombres de Inicial por edad).
+**Cursos y cobertura por sección (nuevo, solo frontend).** *Configuración → Cursos*: el cuadro del curso suma «Secciones donde se dicta», con un docente por sección (crea, cambia o quita la asignación al guardar).
+La etiqueta se calcula por sección: **Con docente** (todas), **Faltan secciones** (algunas), **Sin asignar** (hay aptos pero ninguna sección), **Sin docente** (nadie puede dictarlo).
+
+**Pantallas del frontend relacionadas** (espacios *Aulas y secciones*, *Cursos y docentes*, *Horarios*, *Año escolar*, *Personal*, *Configuración*):
+Panel de aulas · Secciones · Aulas físicas · Panel de cursos · Cursos · Malla curricular · Docentes · Asignaciones · Armado automático ·
+Horario por sección · Horario del docente · Aulas disponibles · Bloques horarios · Años y periodos · Feriados.
+De personal: **Agregar personal** (Datos → Contrato → Cuenta de depósito → Cursos; el cargo y los cursos se piden una sola vez y la secretaría hace solo Datos → Cursos), Asistencia del personal, Pago al personal,
+Áreas de trabajo y **Mi trabajo** (`/mi-trabajo`). Código en `frontend/src/app/features/planificacion/`, `…/personal/`, `…/configuracion/` y `…/dashboard/`.
+
+**Migraciones:** `V1` (esquema), `V2` (outbox), `V3` (Inicial por edad), `V4` (áreas de trabajo), `V5` (datos del colegio), `V6` (pabellones), `V7` (cursos del docente), `V8` (contratos y pagos), `V9` (asistencia del personal), `V10` (cuentas de depósito).
 
 ---
 

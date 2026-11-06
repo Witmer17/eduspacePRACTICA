@@ -18,10 +18,11 @@
           <div><dt>Fecha de nacimiento</dt><dd>{{ a.fechaNacimiento | date: 'dd/MM/yyyy' }}</dd></div>
           <div><dt>Sexo</dt><dd>{{ a.sexo === 'F' ? 'Femenino' : 'Masculino' }}</dd></div>
           <div><dt>Nacionalidad</dt><dd>{{ a.nacionalidad ?? '—' }}</dd></div>
-          <div><dt>Dirección</dt><dd>{{ a.direccion ?? '—' }}{{ a.distrito ? ', ' + a.distrito : '' }}</dd></div>
-          <div><dt>Teléfono</dt><dd>{{ a.telefono ?? '—' }}</dd></div>
-          <div><dt>Correo</dt><dd>{{ a.email ?? '—' }}</dd></div>
-          <div><dt>Colegio de procedencia</dt><dd>{{ a.colegioProcedencia ?? '—' }}</dd></div>
+          <div><dt>Dirección</dt><dd [class.falta-dato]="!a.direccion?.trim()">{{ valor(a.direccion) }}</dd></div>
+          <div><dt>Distrito</dt><dd [class.falta-dato]="!a.distrito?.trim()">{{ valor(a.distrito) }}</dd></div>
+          <div><dt>Teléfono</dt><dd [class.falta-dato]="!a.telefono?.trim()">{{ valor(a.telefono) }}</dd></div>
+          <div><dt>Correo</dt><dd [class.falta-dato]="!a.email?.trim()">{{ valor(a.email) }}</dd></div>
+          <div><dt>Colegio de procedencia</dt><dd [class.falta-dato]="!a.colegioProcedencia?.trim()">{{ valor(a.colegioProcedencia) }}</dd></div>
           <div>
             <dt>Cuenta de acceso</dt>
             <dd>
@@ -36,6 +37,12 @@
             </dd>
           </div>
         </dl>
+        @if (faltantes().length) {
+          <div class="aviso aviso-warn" style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap" role="status">
+            <span><strong>Datos personales incompletos:</strong> falta {{ enumerar(faltantes()) }}. Se pueden completar con «Editar datos».</span>
+            <button type="button" class="btn btn-sm" (click)="editarDatos()">Completar datos</button>
+          </div>
+        }
       </div>
     </section>
 
@@ -43,6 +50,7 @@
       <div class="card-body">
         <div class="toolbar" style="justify-content: space-between; margin-bottom: 14px">
           <h2>Expediente y documentos</h2>
+          <button type="button" class="btn btn-primary" [disabled]="faltan().length === 0" (click)="abrirGenerador()" [title]="faltan().length ? 'Genera las fichas de los documentos que faltan con los datos del alumno' : 'No falta ningún documento requerido'">Generar documentos faltantes</button>
           <span [class]="'badge ' + (expedienteCompleto() ? 'badge-ok' : 'badge-warn')">{{ expedienteCompleto() ? 'Expediente completo' : 'Expediente incompleto' }}</span>
         </div>
         <p class="muted" style="margin: 0 0 12px">Para matricularlo, estos documentos deben estar <strong>subidos y verificados</strong>.</p>
@@ -280,5 +288,35 @@
       <button type="button" class="btn" (click)="cerrar()">Cancelar</button>
       <button type="submit" form="form-salud" class="btn btn-primary" [disabled]="guardando()">Guardar</button>
     </ng-container>
+  </app-modal>
+}
+
+@if (dialogo() === 'generar') {
+  <app-modal titulo="Generar documentos faltantes" [ancho]="640" (cerrar)="cerrar()">
+    <p style="margin: 0 0 12px">Se arma una ficha en PDF con los datos registrados del alumno para cada documento requerido que <strong>falta</strong>, y se guarda en <strong>Expediente y documentos</strong>.</p>
+    @if (cargandoDoc()) { <p class="muted">Reuniendo la información del alumno…</p> }
+    <div class="gen-lista">
+      @for (c of requeridos(); track c.tipo) {
+        <div class="gen-fila" [class.gen-apagada]="c.estado !== 'FALTA'">
+          <div>
+            <strong>{{ nombreRequerido[c.tipo] }}</strong>
+            <div class="muted">Estado: {{ textoDoc(c.estado) }}</div>
+          </div>
+          @if (c.estado === 'FALTA') {
+            <button type="button" class="btn btn-sm btn-primary" [disabled]="!datosDoc() || generando() !== null" (click)="generarRequeridos([c.tipo])">{{ generando() === c.tipo ? 'Generando…' : 'Generar' }}</button>
+          } @else { <span class="badge" [class]="'badge ' + claseDoc(c.estado)">{{ c.estado === 'VERIFICADO' ? '✓ Verificado' : 'Ya está subido' }}</span> }
+        </div>
+      }
+    </div>
+    @if (faltan().length > 1) {
+      <div style="margin-top: 12px; text-align: right">
+        <button type="button" class="btn btn-primary" [disabled]="!datosDoc() || generando() !== null" (click)="generarRequeridos(faltan())">{{ generando() === 'TODOS' ? 'Generando…' : 'Generar los ' + faltan().length + ' faltantes' }}</button>
+      </div>
+    } @else if (faltan().length === 0 && !cargandoDoc()) {
+      <p class="aviso aviso-ok" style="margin-top: 12px">No falta ningún documento requerido.</p>
+    }
+    <p class="muted" style="margin: 12px 0 0">Estas fichas son <strong>informativas</strong>: quedan «subidas, sin verificar». Cuando se revise el documento original, se marca como verificado desde la lista.</p>
+    @if (errorForm()) { <div class="aviso aviso-danger" style="margin-top: 12px" role="alert">{{ errorForm() }}</div> }
+    <ng-container footer><button type="button" class="btn" (click)="cerrar()">Cerrar</button></ng-container>
   </app-modal>
 }

@@ -15,9 +15,10 @@ import { PageHeaderComponent } from '../../../shared/components/page-header/page
     <app-page-header titulo="Cursos y docentes" subtitulo="Crea cursos, asígnalos a un grado y elige qué docente los dicta en cada sección." />
     @if (cargando()) {
       <p class="muted">Cargando…</p>
-    } @else {
+    } @else if (hayAnio()) {
       <app-cursos-docentes [secciones]="secciones()" [docentes]="docentes()" [esAdmin]="esAdmin()" />
     }
+    <!-- Sin periodo activo no hay qué mostrar: el aviso «No hay un periodo activo» lo pone el shell. -->
   `
 })
 export class PanelCursosComponent implements OnInit {
@@ -26,10 +27,12 @@ export class PanelCursosComponent implements OnInit {
   protected readonly secciones = signal<Seccion[]>([]);
   protected readonly docentes = signal<Docente[]>([]);
   protected readonly cargando = signal(true);
+  protected readonly hayAnio = signal(false);
 
   ngOnInit(): void {
     this.plan.anios().subscribe(anios => {
-      const anio: Anio | undefined = anios.find(a => a.estado === 'ACTIVO') ?? anios[0];
+      const anio: Anio | undefined = anios.find(a => a.estado === 'ACTIVO');
+      this.hayAnio.set(!!anio);
       forkJoin({
         secciones: anio ? this.plan.secciones(anio.id).pipe(catchError(() => of([] as Seccion[]))) : of([] as Seccion[]),
         docentes: this.plan.docentes('', 0, 200).pipe(catchError(() => of(null)))

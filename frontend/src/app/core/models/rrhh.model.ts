@@ -77,10 +77,15 @@ export interface PagoPersonal {
   monto: number;
   /** Negativo si es descuento o adelanto. */
   montoFirmado: number;
-  estado: 'PENDIENTE' | 'PAGADO';
+  /** POR_APROBAR: caja ya registró el pago y espera que el administrador lo apruebe. */
+  estado: 'PENDIENTE' | 'POR_APROBAR' | 'PAGADO';
   fechaPago?: string;
   medio?: string;
   referencia?: string;
+  /** Cuándo lo solicitó caja. */
+  solicitadoEn?: string;
+  /** Por qué el administrador lo devolvió a pendiente (se ve en caja). */
+  motivoRechazo?: string;
 }
 
 export interface PagoRequest {

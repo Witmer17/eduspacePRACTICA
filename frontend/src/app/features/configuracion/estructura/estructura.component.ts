@@ -1,6 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { ActivatedRoute, RouterLink } from '@angular/router';import { forkJoin, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { Anio, Aula, Bloque, Curso, Grado, MallaGrado, Nivel, Seccion, Turno } from '../../../core/models/planificacion.model';
 import { Cupo } from '../../../core/models/matricula.model';
@@ -32,6 +31,7 @@ export class EstructuraComponent implements OnInit {
   private readonly api = inject(PlanificacionService);
   private readonly matriculas = inject(MatriculaService);
   private readonly avisos = inject(NotificationService);
+  private readonly ruta = inject(ActivatedRoute);
 
   protected readonly dias = DIAS_SEMANA;
   protected readonly circunferencia = CIRCUNFERENCIA;
@@ -122,7 +122,9 @@ export class EstructuraComponent implements OnInit {
     this.api.anios().subscribe({
       next: a => {
         this.anios.set(a);
-        this.anioId.set((a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0);
+        // Solo se muestra lo del periodo ACTIVO (o el año que se pidió en la URL, p. ej. al volver desde un grado); sin activo, queda vacío.
+        const pedido = Number(this.ruta.snapshot.queryParamMap.get('anioId'));
+        this.anioId.set((a.find(x => x.id === pedido) ?? a.find(x => x.estado === 'ACTIVO'))?.id ?? 0);
         this.cargar();
       },
       error: e => {
@@ -152,6 +154,8 @@ export class EstructuraComponent implements OnInit {
       cupos: anioId ? this.matriculas.cupos(anioId).pipe(catchError(() => of([] as Cupo[]))) : of([] as Cupo[])
     }).subscribe({
       next: r => {
+        // Si mientras tanto se eligió otro año, esta respuesta ya no vale (no debe pisar la del año actual).
+        if (anioId !== this.anioId()) return;
         this.grados.set(r.grados);
         this.niveles.set(r.niveles);
         this.aulas.set(r.aulas);
@@ -160,6 +164,7 @@ export class EstructuraComponent implements OnInit {
         this.secciones.set(r.secciones);
         this.cupos.set(r.cupos);
         forkJoin(r.grados.map(g => this.api.malla(g.id).pipe(catchError(() => of(null))))).subscribe(ms => {
+          if (anioId !== this.anioId()) return;
           this.mallas.set(Object.fromEntries(r.grados.map((g, i) => [g.id, ms[i]])));
           this.cargando.set(false);
         });

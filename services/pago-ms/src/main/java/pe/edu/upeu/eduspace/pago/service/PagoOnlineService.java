@@ -24,7 +24,8 @@ public class PagoOnlineService {
         if (req.getReferencia() == null || req.getReferencia().isBlank()) {
             req.setReferencia("SIM-TX-" + System.currentTimeMillis());
         }
-        return pagoService.registrarPago(req, apoderadoUsuarioId);
+        // Ya no se confirma al instante: queda por aprobar en caja.
+        return pagoService.solicitarPagoOnline(req, apoderadoUsuarioId);
     }
 
     /** El apoderado solo paga por sus hijos: el alumno declarado debe ser hijo suyo y todas las cuotas, de ese alumno. */

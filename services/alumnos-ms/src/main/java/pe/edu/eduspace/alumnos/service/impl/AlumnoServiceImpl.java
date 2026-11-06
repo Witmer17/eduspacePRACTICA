@@ -51,6 +51,12 @@ public class AlumnoServiceImpl implements AlumnoService {
 
     @Override
     @Transactional(readOnly = true)
+    public java.util.List<AlumnoResumenResponse> resumenes(java.util.List<Long> ids) {
+        return repository.findAllById(ids).stream().map(mapper::toResumen).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public AlumnoResponse obtener(Long id) {
         return respuesta(buscar(id));
     }

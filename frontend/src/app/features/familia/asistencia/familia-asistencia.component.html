@@ -1,6 +1,6 @@
 <div class="page">
   <app-page-header titulo="Asistencia" [subtitulo]="ctx.seleccionado()?.nombreCompleto ?? ''">
-    @if (ctx.esApoderado() && ctx.seleccionado()) { <button type="button" class="btn btn-primary" (click)="nueva()">Justificar inasistencia</button> }
+    @if (ctx.esApoderado() && ctx.seleccionado() && (hijo()?.resumen?.dias?.faltas ?? 0) > 0) { <button type="button" class="btn btn-primary" (click)="nueva()">Justificar inasistencia</button> }
   </app-page-header>
 
   <app-selector-hijo />

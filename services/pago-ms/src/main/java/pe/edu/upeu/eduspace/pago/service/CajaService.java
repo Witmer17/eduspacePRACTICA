@@ -6,10 +6,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.upeu.eduspace.pago.dto.*;
 import pe.edu.upeu.eduspace.pago.entity.CajaSesion;
+import pe.edu.upeu.eduspace.pago.entity.MovimientoCredito;
 import pe.edu.upeu.eduspace.pago.entity.Pago;
 import pe.edu.upeu.eduspace.pago.exception.BusinessRuleException;
 import pe.edu.upeu.eduspace.pago.exception.ResourceNotFoundException;
 import pe.edu.upeu.eduspace.pago.repository.CajaSesionRepository;
+import pe.edu.upeu.eduspace.pago.repository.MovimientoCreditoRepository;
 import pe.edu.upeu.eduspace.pago.repository.PagoRepository;
 
 import java.math.BigDecimal;
@@ -25,6 +27,7 @@ public class CajaService {
 
     private final CajaSesionRepository cajaSesionRepository;
     private final PagoRepository pagoRepository;
+    private final MovimientoCreditoRepository movimientosCredito;
 
     @Transactional
     public CajaResponse abrirCaja(Long cajeroUsuarioId, AbrirCajaRequest req) {
@@ -66,6 +69,15 @@ public class CajaService {
             }
         }
 
+        // Los depósitos al crédito de los alumnos también entran a la caja (el efectivo que se recibió está en el cajón).
+        BigDecimal depositos = BigDecimal.ZERO;
+        for (MovimientoCredito d : movimientosCredito.findByCajaSesionIdAndTipoAndAnuladoFalse(sesion.getId(), MovimientoCredito.DEPOSITO)) {
+            totalesPorMedio.merge(d.getMedio(), d.getMonto(), BigDecimal::add);
+            depositos = depositos.add(d.getMonto());
+            if ("EFECTIVO".equals(d.getMedio())) totalEfectivo = totalEfectivo.add(d.getMonto());
+            else totalOtros = totalOtros.add(d.getMonto());
+        }
+
         BigDecimal totalCobrado = totalEfectivo.add(totalOtros);
         BigDecimal efectivoEsperado = sesion.getMontoApertura().add(totalEfectivo);
         BigDecimal declarado = req.getMontoCierreDeclarado();
@@ -89,6 +101,7 @@ public class CajaService {
             .montoApertura(sesion.getMontoApertura())
             .cobrosEfectivo(totalEfectivo)
             .cobrosOtrosMedios(totalOtros)
+            .depositosCredito(depositos)
             .totalCobrado(totalCobrado)
             .efectivoEsperado(efectivoEsperado)
             .montoDeclarado(declarado)
@@ -125,6 +138,14 @@ public class CajaService {
             }
         }
 
+        BigDecimal depositos = BigDecimal.ZERO;
+        for (MovimientoCredito d : movimientosCredito.findByCajaSesionIdAndTipoAndAnuladoFalse(sesion.getId(), MovimientoCredito.DEPOSITO)) {
+            totalesPorMedio.merge(d.getMedio(), d.getMonto(), BigDecimal::add);
+            depositos = depositos.add(d.getMonto());
+            if ("EFECTIVO".equals(d.getMedio())) totalEfectivo = totalEfectivo.add(d.getMonto());
+            else totalOtros = totalOtros.add(d.getMonto());
+        }
+
         return CierreCajaResponse.builder()
             .cajaId(sesion.getId())
             .cajeroUsuarioId(sesion.getCajeroUsuarioId())
@@ -133,6 +154,7 @@ public class CajaService {
             .montoApertura(sesion.getMontoApertura())
             .cobrosEfectivo(totalEfectivo)
             .cobrosOtrosMedios(totalOtros)
+            .depositosCredito(depositos)
             .totalCobrado(totalEfectivo.add(totalOtros))
             .efectivoEsperado(sesion.getMontoCierreSistema())
             .montoDeclarado(sesion.getMontoCierreDeclarado())

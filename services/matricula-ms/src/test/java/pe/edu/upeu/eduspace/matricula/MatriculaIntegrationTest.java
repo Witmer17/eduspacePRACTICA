@@ -82,7 +82,7 @@ class MatriculaIntegrationTest extends PostgresIntegrationTestBase {
     }
 
     MatriculaResponse crear(long alumnoId, long seccionId) {
-        return service.crear(new MatriculaCreateRequest(alumnoId, seccionId, "NUEVA", null), 9L);
+        return service.crear(new MatriculaCreateRequest(alumnoId, seccionId, "NUEVA", null, null), 9L);
     }
 
     int ocupados(long seccionId) {
@@ -185,24 +185,51 @@ class MatriculaIntegrationTest extends PostgresIntegrationTestBase {
             """.formatted(eventId, tipo, matriculaId, concepto);
     }
 
+    /** Lo que pago-ms dice de la cuota de matrícula de esa matrícula: con saldo 0 está pagada por completo. */
+    private void cuotaDeMatricula(long matriculaId, String saldo) {
+        when(pagoClient.cuotas(matriculaId)).thenReturn(java.util.List.of(new PagoClient.CuotaResumen(1L, "MATRICULA", "Matrícula", (short) 1,
+            new java.math.BigDecimal("350.00"), java.math.BigDecimal.ZERO, new java.math.BigDecimal("350.00"), new java.math.BigDecimal(saldo), "2026-05-10",
+            new java.math.BigDecimal(saldo).signum() == 0 ? "PAGADA" : "PARCIAL")));
+    }
+
     @Test
-    void pagoConfirmadoDejaPorAprobarUnaSolaVezYLaAprobacionConfirma() {
+    void pagoCompletoDeLaMatriculaLaGeneraUnaSolaVezSinPasarPorAprobar() {
         MatriculaResponse m = crear(1, 10);
+        cuotaDeMatricula(m.id(), "0.00");
         String id = java.util.UUID.randomUUID().toString();
         pagoConsumer.procesar(pagoJson(id, m.id(), "MATRICULA", "pago.confirmado"), false);
         pagoConsumer.procesar(pagoJson(id, m.id(), "MATRICULA", "pago.confirmado"), false);   // duplicado
-        // otro evento distinto para la misma matrícula tampoco la confirma de nuevo
+        // otro evento distinto para la misma matrícula tampoco la genera de nuevo
         pagoConsumer.procesar(pagoJson(java.util.UUID.randomUUID().toString(), m.id(), "MATRICULA", "pago.confirmado"), false);
 
-        // el pago NO matricula: queda POR_APROBAR y todavía no se publica matricula.confirmada
-        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("POR_APROBAR");
-        assertThat(eventos("matricula.confirmada")).isZero();
-        assertThat(jdbc.queryForObject("select count(*) from matricula_historial where tipo_cambio = 'PAGO'", Integer.class)).isEqualTo(1);
-
-        assertThat(service.aprobar(m.id(), 9L).estado()).isEqualTo("MATRICULADO");
-        service.aprobar(m.id(), 9L);   // repetir no publica otra vez
+        // el pago completo la GENERA: MATRICULADO y se publica matricula.confirmada una sola vez
+        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("MATRICULADO");
         assertThat(eventos("matricula.confirmada")).isEqualTo(1);
-        assertThat(jdbc.queryForObject("select count(*) from matricula_historial where tipo_cambio = 'APROBACION'", Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("select count(*) from matricula_historial where tipo_cambio = 'PAGO'", Integer.class)).isEqualTo(1);
+        service.aprobar(m.id(), 9L);   // aprobar una ya generada no publica otra vez
+        assertThat(eventos("matricula.confirmada")).isEqualTo(1);
+    }
+
+    @Test
+    void unPagoParcialNoGeneraLaMatricula() {
+        MatriculaResponse m = crear(1, 10);
+        cuotaDeMatricula(m.id(), "150.00");   // todavía debe S/ 150
+        pagoConsumer.procesar(pagoJson(java.util.UUID.randomUUID().toString(), m.id(), "MATRICULA", "pago.confirmado"), false);
+        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("PRE_MATRICULA");
+        assertThat(eventos("matricula.confirmada")).isZero();
+
+        // cuando se paga el resto, el siguiente pago confirmado sí la genera
+        cuotaDeMatricula(m.id(), "0.00");
+        pagoConsumer.procesar(pagoJson(java.util.UUID.randomUUID().toString(), m.id(), "MATRICULA", "pago.confirmado"), false);
+        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("MATRICULADO");
+        assertThat(eventos("matricula.confirmada")).isEqualTo(1);
+    }
+
+    @Test
+    void sinSaberLaCuotaDeMatriculaNoSeGenera() {
+        MatriculaResponse m = crear(1, 10);   // pago-ms (simulado) no devuelve cuotas
+        pagoConsumer.procesar(pagoJson(java.util.UUID.randomUUID().toString(), m.id(), "MATRICULA", "pago.confirmado"), false);
+        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("PRE_MATRICULA");
     }
 
     @Test
@@ -230,9 +257,10 @@ class MatriculaIntegrationTest extends PostgresIntegrationTestBase {
     @Test
     void pagoAnuladoSoloDejaConstanciaYNoRevierteLaMatricula() {
         MatriculaResponse m = crear(1, 10);
+        cuotaDeMatricula(m.id(), "0.00");
         pagoConsumer.procesar(pagoJson(java.util.UUID.randomUUID().toString(), m.id(), "MATRICULA", "pago.confirmado"), false);
         pagoConsumer.procesar(pagoJson(java.util.UUID.randomUUID().toString(), m.id(), "MATRICULA", "pago.anulado"), true);
-        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("POR_APROBAR");
+        assertThat(jdbc.queryForObject("select estado from matriculas where id = ?", String.class, m.id())).isEqualTo("MATRICULADO");
         assertThat(jdbc.queryForObject("select count(*) from matricula_historial where tipo_cambio = 'ANULACION'", Integer.class)).isEqualTo(1);
     }
 

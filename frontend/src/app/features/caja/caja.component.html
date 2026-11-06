@@ -1,158 +1,285 @@
 <div class="page">
-  <app-page-header titulo="Caja" [subtitulo]="'Cajero: ' + (usuario()?.username ?? '')">
-    @if (caja()) { <button type="button" class="btn" (click)="pedirCierre()">Cerrar caja</button> }
-  </app-page-header>
+  <app-page-header titulo="Caja" subtitulo="Elige al alumno y anota el efectivo que entrega." />
 
-  @if (cargandoCaja()) {
-    <div class="muted">Cargando…</div>
-  } @else if (!caja()) {
-    @if (cierre(); as c) {
-      <section class="card">
-        <div class="card-body">
-          <h2 style="margin-bottom: 12px">Caja cerrada · arqueo</h2>
-          <dl class="datos">
-            <div><dt>Apertura</dt><dd>S/ {{ c.montoApertura | number: '1.2-2' }}</dd></div>
-            <div><dt>Cobros en efectivo</dt><dd>S/ {{ c.cobrosEfectivo | number: '1.2-2' }}</dd></div>
-            <div><dt>Otros medios</dt><dd>S/ {{ c.cobrosOtrosMedios | number: '1.2-2' }}</dd></div>
-            <div><dt>Total cobrado</dt><dd><strong>S/ {{ c.totalCobrado | number: '1.2-2' }}</strong></dd></div>
-            <div><dt>Efectivo esperado</dt><dd>S/ {{ c.efectivoEsperado | number: '1.2-2' }}</dd></div>
-            <div><dt>Efectivo declarado</dt><dd>S/ {{ (c.montoDeclarado ?? 0) | number: '1.2-2' }}</dd></div>
-            <div><dt>Diferencia</dt><dd [style.color]="(c.diferencia ?? 0) !== 0 ? 'var(--danger)' : 'var(--ok)'"><strong>S/ {{ (c.diferencia ?? 0) | number: '1.2-2' }}</strong></dd></div>
-          </dl>
+  <!-- El recibo del último pago: se imprime solo la hoja -->
+  @if (recibo(); as r) {
+    <div class="barra-recibo no-imprimir">
+      <div class="aviso aviso-ok" role="status" style="margin: 0">Se recibieron <strong>S/ {{ r.pago.montoTotal | number: '1.2-2' }}</strong> en efectivo.</div>
+      <span class="espacio"></span>
+      <button type="button" class="btn btn-primary" (click)="imprimir()">Imprimir recibo</button>
+      <button type="button" class="btn" (click)="cerrarRecibo()">Listo</button>
+    </div>
+    <article class="hoja-documento hoja-recibo" aria-label="Recibo de pago">
+      <header class="rc-cab">
+        <img src="/img/colegio-escudo.svg" alt="" />
+        <div>
+          <strong>{{ colegio()?.nombre ?? 'Colegio' }}</strong>
+          @if (colegio()?.lema) { <em>{{ colegio()?.lema }}</em> }
+          <small>{{ lineaColegio(colegio()) }}</small>
         </div>
-      </section>
-    }
-    <section class="card">
-      <div class="card-body">
-        <h2 style="margin-bottom: 6px">Abrir caja</h2>
-        <p class="muted" style="margin-top: 0">Para cobrar hay que abrir caja con el efectivo inicial.</p>
-        <div class="toolbar">
-          <label class="muted" for="ap-monto">Efectivo inicial (S/)</label>
-          <input id="ap-monto" class="input" type="number" min="0" step="0.10" [formControl]="montoApertura" style="width: 140px" />
-          <button type="button" class="btn btn-primary" [disabled]="ocupado()" (click)="abrirCaja()">Abrir caja</button>
-        </div>
-        @if (errorCaja()) { <div class="aviso aviso-danger" style="margin-top: 12px" role="alert">{{ errorCaja() }}</div> }
+      </header>
+      <div class="rc-titulo">
+        <h1>{{ r.pago.comprobante?.tipo === 'BOLETA' ? 'Boleta' : 'Recibo' }} de pago</h1>
+        <strong>N.º {{ r.pago.comprobante?.numeroCompleto ?? 'en proceso' }}</strong>
       </div>
-    </section>
-  } @else {
-    @if (parcial(); as p) {
-      <section class="kpis" aria-label="Caja abierta">
-        <div class="kpi"><div class="etiqueta">Abierta desde</div><div class="valor" style="font-size: 20px">{{ p.aperturaEn | date: 'HH:mm' }}</div></div>
-        <div class="kpi"><div class="etiqueta">Cobrado hoy</div><div class="valor" style="color: var(--ok)">S/ {{ p.totalCobrado | number: '1.2-2' }}</div></div>
-        <div class="kpi"><div class="etiqueta">Efectivo esperado en caja</div><div class="valor">S/ {{ p.efectivoEsperado | number: '1.2-2' }}</div></div>
-      </section>
-    }
-
-    <section class="card">
-      <div class="card-body">
-        <h2 style="margin-bottom: 12px">Nuevo cobro</h2>
-        <app-buscador-alumno [soloActivos]="false" (elegidoAlumno)="elegirAlumno($event)" />
-      </div>
-    </section>
-
-    @if (cuenta(); as c) {
-      <div class="card">
-        <div class="card-body" style="padding-bottom: 0">
-          <div class="toolbar" style="justify-content: space-between">
-            <h2>Cuotas de {{ c.alumnoNombre }}</h2>
-            <span class="muted">Responsable de pago: {{ c.responsableNombre ?? '—' }} · Vencido: <strong style="color: var(--danger)">S/ {{ c.totalVencido | number: '1.2-2' }}</strong></span>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th style="width: 44px"></th><th>Concepto</th><th>Vence</th><th>Saldo</th><th>A cobrar (S/)</th><th>Estado</th></tr></thead>
-            <tbody>
-              @for (q of pagables(); track q.id) {
-                <tr>
-                  <td><input type="checkbox" [checked]="elegida(q.id)" (change)="alternar(q, $any($event.target).checked)" [attr.aria-label]="'Cobrar ' + q.descripcion" style="width: 18px; height: 18px" /></td>
-                  <td><strong>{{ q.descripcion }}</strong></td>
-                  <td>{{ q.fechaVencimiento | date: 'dd/MM/yyyy' }}@if (q.diasAtraso > 0) { <div class="muted" style="color: var(--danger)">{{ q.diasAtraso }} días · mora S/ {{ q.mora | number: '1.2-2' }}</div> }</td>
-                  <td>{{ q.saldo | number: '1.2-2' }}</td>
-                  <td>
-                    @if (elegida(q.id)) { <input class="input" type="number" min="0.01" [max]="q.saldo" step="0.10" style="width: 110px; min-height: 36px" [value]="montos()[q.id]" (input)="cambiarMonto(q, $any($event.target).value)" [attr.aria-label]="'Monto a cobrar de ' + q.descripcion" /> }
-                    @else { <span class="muted">—</span> }
-                  </td>
-                  <td><span [class]="'badge ' + (q.estado === 'VENCIDA' ? 'badge-danger' : q.estado === 'PARCIAL' ? 'badge-violet' : 'badge-warn')">{{ q.estado }}</span></td>
-                </tr>
-              } @empty {
-                <tr><td colspan="6" class="vacio">Este alumno no tiene cuotas pendientes.</td></tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      @if (nElegidas() > 0) {
-        <section class="card">
-          <div class="card-body">
-            <form [formGroup]="cobro" (ngSubmit)="cobrar()" novalidate>
-              <div class="form-grid">
-                <div class="field"><label for="c-pagador">Pagador</label><input id="c-pagador" formControlName="pagadorNombre" /></div>
-                <div class="field"><label for="c-doc">Documento del pagador</label><input id="c-doc" formControlName="pagadorDocumento" /></div>
-                <div class="field">
-                  <label for="c-medio">Medio de pago</label>
-                  <select id="c-medio" formControlName="medio">@for (m of medios; track m) { <option [value]="m">{{ m.replace('_', ' / ') }}</option> }</select>
-                </div>
-                <div class="field">
-                  <label for="c-ref">N.º de operación {{ cobro.controls.medio.value === 'EFECTIVO' ? '(opcional)' : '' }}</label>
-                  <input id="c-ref" formControlName="referencia" />
-                </div>
-                <div class="field">
-                  <label for="c-comp">Comprobante</label>
-                  <select id="c-comp" formControlName="tipoComprobante"><option value="RECIBO">Recibo</option><option value="BOLETA">Boleta</option></select>
-                </div>
-                <div class="field" style="justify-content: flex-end">
-                  <div style="font-size: 12px; color: var(--ink-2)">Total a cobrar ({{ nElegidas() }} cuota(s))</div>
-                  <div style="font-size: 28px; font-weight: 700">S/ {{ total() | number: '1.2-2' }}</div>
-                </div>
-              </div>
-              @if (errorCobro()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorCobro() }}</div> }
-              <div class="toolbar" style="margin-top: 16px">
-                <button type="submit" class="btn btn-primary" [disabled]="cobrando() || total() <= 0" style="min-height: 52px; padding: 0 28px; font-size: 16px">{{ cobrando() ? 'Cobrando…' : 'Cobrar S/ ' + (total() | number: '1.2-2') }}</button>
-                <button type="button" class="btn" (click)="anularCobroVacio()">Quitar selección</button>
-              </div>
-              <p class="muted" style="margin-bottom: 0">Cada cobro lleva una clave única: si se pulsa dos veces o se corta la conexión, no se cobra dos veces ni se emiten dos comprobantes.</p>
-            </form>
-          </div>
-        </section>
-      }
-    }
+      <dl class="rc-datos">
+        <div><dt>Alumno</dt><dd>{{ r.alumno }}</dd></div>
+        <div><dt>Fecha y hora</dt><dd>{{ r.pago.pagadoEn | date: 'dd/MM/yyyy HH:mm' }}</dd></div>
+        @if (r.codigo) { <div><dt>Código</dt><dd>{{ r.codigo }}</dd></div> }
+        @if (r.documento) { <div><dt>Documento</dt><dd>{{ r.documento }}</dd></div> }
+        <div><dt>Recibido de</dt><dd>{{ r.pago.pagadorNombre ?? r.responsable ?? '—' }}</dd></div>
+        <div><dt>Forma de pago</dt><dd>Efectivo</dd></div>
+      </dl>
+      <table class="rc-tabla">
+        <thead><tr><th>Concepto</th><th class="num">Importe</th><th class="num">Descuento</th>@if (r.hayMora) { <th class="num">Mora</th> }<th class="num">Pagado</th><th class="num">Saldo</th></tr></thead>
+        <tbody>
+          @for (l of r.lineas; track l.descripcion) {
+            <tr>
+              <td>{{ l.descripcion }}</td>
+              <td class="num">{{ l.importe | number: '1.2-2' }}</td>
+              <td class="num">{{ l.descuento > 0 ? '− ' + (l.descuento | number: '1.2-2') : '—' }}</td>
+              @if (r.hayMora) { <td class="num">{{ l.mora > 0 ? (l.mora | number: '1.2-2') : '—' }}</td> }
+              <td class="num"><strong>{{ l.pagado | number: '1.2-2' }}</strong></td>
+              <td class="num">{{ l.saldo | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <div class="rc-total"><span>Total recibido</span><strong>S/ {{ r.pago.montoTotal | number: '1.2-2' }}</strong></div>
+      @if (r.totalDescuento > 0) { <p style="margin: 8px 0 0; font-size: .85rem; color: #4a5266">Incluye S/ {{ r.totalDescuento | number: '1.2-2' }} de descuento en las cuotas pagadas.</p> }
+      <footer class="rc-pie">
+        <span>Atendió: {{ r.cajero || '—' }}<br />Gracias por su pago.</span>
+        <div class="rc-firma"><span class="linea"></span>Caja</div>
+      </footer>
+    </article>
   }
+
+  <section class="card no-imprimir" style="margin-bottom: 16px">
+    <div class="card-body">
+      <h2 style="margin-bottom: 12px">¿De qué alumno es el dinero?</h2>
+      <app-buscador-alumno [soloActivos]="false" (elegidoAlumno)="elegirAlumno($event)" />
+    </div>
+  </section>
+
+  @if (alumno(); as a) {
+    <section class="card" style="margin-bottom: 16px" aria-label="Datos del alumno">
+      <div class="card-body ficha">
+        <div class="quien">
+          <h2 style="margin: 0">{{ cuenta()?.alumnoNombre ?? a.nombreCompleto }}</h2>
+          @if (a.estado) { <span class="badge" [class.badge-ok]="a.estado === 'ACTIVO'" [class.badge-gray]="a.estado !== 'ACTIVO'">{{ a.estado }}</span> }
+        </div>
+        <dl class="ficha-datos">
+          @if (a.codigo) { <div><dt>Código</dt><dd>{{ a.codigo }}</dd></div> }
+          @if (a.numeroDocumento) { <div><dt>{{ a.tipoDocumento ?? 'Documento' }}</dt><dd>{{ a.numeroDocumento }}</dd></div> }
+          <div><dt>Responsable de pago</dt><dd>{{ cuenta()?.responsableNombre ?? '—' }}</dd></div>
+        </dl>
+        <div>
+          <div class="muted" style="font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px">Descuento</div>
+          @if (descuentos().length) {
+            <div class="chips">@for (d of descuentos(); track d.id) { <span class="badge badge-violet" [title]="d.motivo ?? ''">{{ etiquetaDescuento(d) }}</span> }</div>
+          } @else {
+            <span class="muted">Sin descuento asignado.</span>
+          }
+          @if (descuentoAplicado() > 0) { <div class="muted" style="margin-top: 4px">Ya descontado en sus cuotas: <strong>S/ {{ descuentoAplicado() | number: '1.2-2' }}</strong></div> }
+        </div>
+        @if (matricula(); as m) {
+          <div aria-label="Matrícula del alumno">
+            <div class="muted" style="font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px">Matrícula</div>
+            <div class="chips">
+              <span class="badge" [class.badge-ok]="m.estadoMatricula === 'MATRICULADO'" [class.badge-warn]="m.estadoMatricula === 'PRE_MATRICULA' || m.estadoMatricula === 'POR_APROBAR'" [class.badge-gray]="m.estadoMatricula !== 'MATRICULADO' && m.estadoMatricula !== 'PRE_MATRICULA' && m.estadoMatricula !== 'POR_APROBAR'">{{ estadoMatricula(m.estadoMatricula) }}</span>
+            </div>
+            <dl class="ficha-datos" style="margin-top: 8px">
+              @if (m.detalle?.grado) { <div><dt>Grado</dt><dd>{{ m.detalle!.grado }}@if (m.detalle!.seccion) { · Sección {{ m.detalle!.seccion }} }</dd></div> }
+              @if (m.detalle?.turno) { <div><dt>Turno</dt><dd>{{ m.detalle!.turno === 'TARDE' ? 'Tarde' : m.detalle!.turno === 'MANANA' ? 'Mañana' : m.detalle!.turno }}</dd></div> }
+              @if (m.detalle; as d) {
+                <div><dt>Forma de pago</dt><dd>{{ d.planEtiqueta }}@if (d.planDescuento > 0) { <span class="badge badge-ok" style="margin-left: 6px">{{ d.planDescuento }} % de descuento</span> }</dd></div>
+              }
+              @if (m.total !== null && m.total !== undefined) {
+                <div><dt>Matrícula</dt><dd>S/ {{ m.total | number: '1.2-2' }}@if (m.descuento) { <span class="muted"> (descuento S/ {{ m.descuento | number: '1.2-2' }})</span> }</dd></div>
+                <div><dt>Falta pagar</dt><dd [style.color]="m.faltante > 0 ? 'var(--warn)' : 'var(--ok)'">S/ {{ m.faltante | number: '1.2-2' }}@if (m.credito > 0) { <span class="muted"> · a favor S/ {{ m.credito | number: '1.2-2' }}</span> }</dd></div>
+              }
+            </dl>
+            @if (m.estadoMatricula === 'PRE_MATRICULA') {
+              @if (m.puedeGenerar) {
+                <button type="button" class="btn btn-primary btn-sm" [disabled]="confirmando()" (click)="confirmarMatricula()">{{ confirmando() ? 'Confirmando…' : 'Confirmar matrícula' }}</button>
+                <span class="muted" style="margin-left: 8px">Su saldo a favor cubre la matrícula.</span>
+              } @else if (m.motivo) {
+                <p class="muted" style="margin: 6px 0 0">{{ m.motivo }}</p>
+              }
+            } @else if (m.estadoMatricula === 'MATRICULADO') {
+              <p class="muted" style="margin: 6px 0 0">La matrícula está confirmada: sus pensiones se generan según la forma de pago acordada.</p>
+            }
+          </div>
+        }
+        @if (cuenta(); as c) {
+          <div class="cifras">
+            <div class="cifra"><span>Pagado</span><strong style="color: var(--ok)">S/ {{ c.totalCobrado | number: '1.2-2' }}</strong></div>
+            <div class="cifra"><span>Debe ahora</span><strong>S/ {{ totalPendiente() | number: '1.2-2' }}</strong></div>
+            <div class="cifra"><span>De eso, vencido</span><strong [style.color]="c.totalVencido > 0 ? 'var(--danger)' : ''">S/ {{ c.totalVencido | number: '1.2-2' }}</strong></div>
+            <div class="cifra"><span>A favor en su cuenta</span><strong>S/ {{ (credito()?.saldo ?? 0) | number: '1.2-2' }}</strong></div>
+          </div>
+        } @else if (cargandoCuenta()) {
+          <p class="muted" style="margin: 0">Cargando la cuenta…</p>
+        }
+      </div>
+    </section>
+
+    <div class="dos">
+      <!-- Recibir pago en efectivo -->
+      <section class="card" aria-labelledby="t-recibir">
+        <div class="card-body">
+          <h2 id="t-recibir" style="margin-bottom: 4px">Recibir pago</h2>
+          <p class="muted" style="margin-top: 0">El dinero se aplica solo a sus cuotas pendientes, de la más antigua a la más nueva.</p>
+          @if (cuenta() && pagables().length === 0) {
+            <div class="vacio-card">No tiene cuotas pendientes. Si entrega dinero, agrégalo a su cuenta.</div>
+          } @else {
+            @if (sugeridos(); as sg) {
+              <div class="atajos" role="group" aria-label="Montos sugeridos">
+                <span class="muted">Ya viene lo que debe ahora. Cobrar:</span>
+                <button type="button" class="chip" [class.on]="montoActual() === sg.ahora" (click)="usarMonto(sg.ahora)">Lo que debe ahora · S/ {{ sg.ahora | number: '1.2-2' }}</button>
+                @if (sg.todo !== sg.ahora) { <button type="button" class="chip" [class.on]="montoActual() === sg.todo" (click)="usarMonto(sg.todo)">Todo lo pendiente · S/ {{ sg.todo | number: '1.2-2' }}</button> }
+                @if (sg.proxima !== sg.ahora && sg.proxima !== sg.todo) { <button type="button" class="chip" [class.on]="montoActual() === sg.proxima" (click)="usarMonto(sg.proxima)">Solo la próxima cuota · S/ {{ sg.proxima | number: '1.2-2' }}</button> }
+              </div>
+            }
+            <div class="field">
+              <label for="efectivo">Efectivo recibido (S/)</label>
+              <input id="efectivo" class="input monto-input" type="number" min="0" step="0.10" inputmode="decimal" [formControl]="efectivo" />
+            </div>
+            @if (reparto(); as r) {
+              @if (r.lista.length) {
+                <ul class="reparto" aria-label="A qué cuotas se aplica">
+                  @for (x of r.lista; track x.cuota.id) {
+                    <li><span>{{ x.cuota.descripcion }}@if (x.monto < x.cuota.saldo) { <span class="muted"> (queda S/ {{ x.cuota.saldo - x.monto | number: '1.2-2' }})</span> }</span><strong>S/ {{ x.monto | number: '1.2-2' }}</strong></li>
+                  }
+                </ul>
+              }
+              @if (r.sobrante > 0) {
+                <div class="aviso aviso-warn" style="margin-top: 10px" role="status">Sobran <strong>S/ {{ r.sobrante | number: '1.2-2' }}</strong>: es más de lo que debe (S/ {{ totalPendiente() | number: '1.2-2' }}). Baja el monto o agrega la diferencia a su cuenta.</div>
+              }
+            }
+            @if (errorCobro()) { <div class="aviso aviso-danger" style="margin-top: 10px" role="alert">{{ errorCobro() }}</div> }
+            <button type="button" class="btn btn-primary" style="margin-top: 14px; min-height: 48px; padding: 0 24px" [disabled]="cobrando() || efectivo.invalid || !reparto().lista.length || reparto().sobrante > 0" (click)="cobrar()">
+              {{ cobrando() ? 'Registrando…' : 'Registrar pago' }}
+            </button>
+          }
+        </div>
+      </section>
+
+      <!-- Agregar dinero a la cuenta del alumno -->
+      <section class="card" aria-labelledby="t-agregar">
+        <div class="card-body">
+          <h2 id="t-agregar" style="margin-bottom: 4px">Agregar dinero a su cuenta</h2>
+          <p class="muted" style="margin-top: 0">Queda a favor del alumno y se descuenta de las pensiones cuando vencen.</p>
+          @if (credito(); as cr) {
+            <div class="credito-linea" style="margin-bottom: 12px">
+              <span>En su cuenta ahora: <strong>S/ {{ cr.saldo | number: '1.2-2' }}</strong></span>
+              @if (puedeUsarCredito()) { <button type="button" class="btn btn-sm" (click)="usarCredito()">Pagar lo vencido con su cuenta</button> }
+            </div>
+          }
+          <div class="field">
+            <label for="aporte">Dinero a agregar (S/)</label>
+            <input id="aporte" class="input monto-input" type="number" min="0" step="0.10" inputmode="decimal" [formControl]="aporte" />
+          </div>
+          @if (errorAporte()) { <div class="aviso aviso-danger" style="margin-top: 10px" role="alert">{{ errorAporte() }}</div> }
+          <button type="button" class="btn btn-primary" style="margin-top: 14px; min-height: 48px; padding: 0 24px" [disabled]="aportando() || aporte.invalid" (click)="agregar()">
+            {{ aportando() ? 'Agregando…' : 'Agregar a su cuenta' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
+  <div class="bloque" [style.margin-top.px]="alumno() ? 16 : 0">
+    <!-- Pagos de apoderados por aprobar -->
+    @if (porAprobar().length) {
+      <section class="card destacada" aria-labelledby="t-aprobar">
+        <div class="card-body">
+          <h2 id="t-aprobar" style="margin-bottom: 4px">Pagos por aprobar <span class="badge badge-violet">{{ porAprobar().length }}</span></h2>
+          <p class="muted" style="margin-top: 0">Pagos en línea de los apoderados: verifica que llegó el dinero y apruébalos.</p>
+          @for (p of porAprobar(); track p.id) {
+            <article class="por-aprobar">
+              <div class="pa-cab"><strong>{{ nombres.nombre(p.alumnoId) }}</strong><strong>S/ {{ p.montoTotal | number: '1.2-2' }}</strong></div>
+              <div class="muted">
+                {{ p.pagadoEn | date: 'dd/MM HH:mm' }} · {{ p.medio.replace('_', ' / ') }}@if (p.referencia) { · Op. {{ p.referencia }} }
+                @if (p.pagadorNombre) { <div>Pagó: {{ p.pagadorNombre }}</div> }
+              </div>
+              <ul class="pa-cuotas">@for (d of p.detalles; track d.id) { <li>{{ d.cuotaDescripcion }} · S/ {{ d.montoAplicado | number: '1.2-2' }}</li> }</ul>
+              <div class="toolbar">
+                <button type="button" class="btn btn-primary" [disabled]="resolviendo() === p.id" (click)="aprobar(p)" [attr.aria-label]="'Aprobar el pago de ' + nombres.nombre(p.alumnoId)">Aprobar</button>
+                <button type="button" class="btn" [disabled]="resolviendo() === p.id" (click)="pedirRechazo(p)" [attr.aria-label]="'Rechazar el pago de ' + nombres.nombre(p.alumnoId)">Rechazar</button>
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+    }
+
+    <!-- Matrículas por pagar: alumnos con pre-matrícula que aún deben la matrícula -->
+    <section class="card" [class.destacada]="matriculasPorPagar().length" aria-labelledby="t-matriculas">
+      <div class="card-body">
+        <div class="toolbar" style="justify-content: space-between">
+          <h2 id="t-matriculas" style="margin: 0">Matrículas por pagar <span class="badge" [class.badge-violet]="matriculasPorPagar().length" [class.badge-gray]="!matriculasPorPagar().length">{{ matriculasPorPagar().length }}</span></h2>
+        </div>
+        <p class="muted" style="margin: 6px 0 10px">Alumnos que se están matriculando y aún deben la matrícula. Al pagarla completa (aquí, con la pasarela o con su crédito) la matrícula se genera sola.</p>
+        @for (m of verMatriculas(); track m.matriculaId) {
+          <div class="fila">
+            <div class="nombre"><strong>{{ m.alumnoNombre }}</strong><span class="muted">Matrícula S/ {{ m.saldo | number: '1.2-2' }}@if (m.credito > 0) { · a favor S/ {{ m.credito | number: '1.2-2' }} }</span>
+              @if (m.detalle; as d) { <span class="muted">@if (d.grado) { {{ d.grado }}@if (d.seccion) { · Sección {{ d.seccion }} } · }Pago {{ d.planEtiqueta.toLowerCase() }}@if (d.planDescuento > 0) { (−{{ d.planDescuento }} %) }</span> }
+            </div>
+            @if (m.descuentoEnRevision) {
+              <span class="badge badge-violet" title="La secretaría debe aprobar el descuento antes de cobrar">Descuento en revisión</span>
+              <button type="button" class="btn btn-sm" disabled>Cobrar</button>
+            } @else {
+              <span class="debe" style="color: var(--warn)">Falta S/ {{ m.faltante | number: '1.2-2' }}</span>
+              <button type="button" class="btn btn-sm" (click)="cobrarMatricula(m)" [attr.aria-label]="'Cobrar la matrícula de ' + m.alumnoNombre">Cobrar</button>
+            }
+          </div>
+        } @empty {
+          <p class="muted" style="margin: 0">No hay matrículas esperando pago.</p>
+        }
+        @if (matriculasPorPagar().length > verMatriculas().length) { <p class="muted" style="margin: 10px 0 0">y {{ matriculasPorPagar().length - verMatriculas().length }} más.</p> }
+      </div>
+    </section>
+
+    <!-- Morosos: el aviso a las familias sale solo -->
+    <section class="card" aria-labelledby="t-morosos">
+      <div class="card-body">
+        <div class="toolbar" style="justify-content: space-between">
+          <h2 id="t-morosos" style="margin: 0">Morosos <span class="badge" [class.badge-danger]="totalMorosos() > 0" [class.badge-gray]="!totalMorosos()">{{ totalMorosos() }}</span></h2>
+          @if (totalMorosos() > 0) { <span class="muted">Deuda vencida: <strong style="color: var(--danger)">S/ {{ deudaMorosos() | number: '1.2-2' }}</strong></span> }
+        </div>
+        <div class="aviso aviso-ok" style="margin: 10px 0" role="status">Las familias reciben el aviso <strong>solas</strong>: uno antes de que venza la cuota y otro el día que vence. No hace falta enviar nada.</div>
+        @if (cargandoMorosos()) {
+          <p class="muted">Cargando…</p>
+        } @else {
+          @for (m of verMorosos(); track m.alumnoId) {
+            <div class="fila">
+              <div class="nombre"><strong>{{ m.alumnoNombre }}</strong><span class="muted">{{ m.responsableNombre || 'Sin responsable' }} · {{ m.cuotasVencidas }} {{ m.cuotasVencidas === 1 ? 'cuota vencida' : 'cuotas vencidas' }}</span></div>
+              <span class="debe">S/ {{ m.saldoTotalVencido | number: '1.2-2' }}</span>
+              <button type="button" class="btn btn-sm" (click)="cobrarA(m)" [attr.aria-label]="'Cobrar a ' + m.alumnoNombre">Cobrar</button>
+            </div>
+          } @empty {
+            <p class="muted" style="margin: 0">No hay alumnos con cuotas vencidas.</p>
+          }
+          @if (totalMorosos() > verMorosos().length) { <p class="muted" style="margin: 10px 0 0">y {{ totalMorosos() - verMorosos().length }} más (en Alumnos → Morosos).</p> }
+        }
+      </div>
+    </section>
+  </div>
 </div>
 
-@if (cerrando()) {
-  <app-modal titulo="Cerrar caja" [ancho]="460" (cerrar)="cancelarCierre()">
-    <p style="margin-top: 0">Cuenta el efectivo que hay en caja y anótalo. El sistema calcula la diferencia con lo esperado
-      @if (parcial(); as p) { (<strong>S/ {{ p.efectivoEsperado | number: '1.2-2' }}</strong>) }.</p>
+@if (rechazando(); as p) {
+  <app-modal titulo="Rechazar el pago" [ancho]="460" (cerrar)="rechazando.set(null)">
+    <p style="margin-top: 0">Pago de <strong>S/ {{ p.montoTotal | number: '1.2-2' }}</strong> de {{ nombres.nombre(p.alumnoId) }}. Las cuotas siguen pendientes y el apoderado verá el motivo.</p>
     <div class="field">
-      <label for="cd-monto">Efectivo contado (S/)</label>
-      <input id="cd-monto" class="input" type="number" min="0" step="0.10" [formControl]="montoDeclarado" />
+      <label for="rz-motivo">Motivo</label>
+      <input id="rz-motivo" class="input" [formControl]="motivoRechazo" maxlength="300" placeholder="Ej.: el número de operación no existe" />
     </div>
-    @if (errorCaja()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorCaja() }}</div> }
+    @if (errorRechazo()) { <div class="aviso aviso-danger" style="margin-top: 12px" role="alert">{{ errorRechazo() }}</div> }
     <ng-container footer>
-      <button type="button" class="btn" (click)="cancelarCierre()">Cancelar</button>
-      <button type="button" class="btn btn-danger" [disabled]="ocupado()" (click)="cerrarCaja()">Cerrar caja</button>
+      <button type="button" class="btn" (click)="rechazando.set(null)">Cancelar</button>
+      <button type="button" class="btn btn-danger" [disabled]="resolviendo() === p.id" (click)="rechazar(p)">Rechazar pago</button>
     </ng-container>
   </app-modal>
 }
 
-@if (recibo(); as p) {
-  <app-modal titulo="Cobro registrado" [ancho]="460" (cerrar)="cerrarRecibo()">
-    <div class="aviso aviso-ok" role="status">Se cobraron <strong>S/ {{ p.montoTotal | number: '1.2-2' }}</strong> por {{ p.medio.replace('_', ' / ') }}.</div>
-    <dl class="datos" style="margin-top: 14px">
-      <div><dt>{{ p.comprobante?.tipo ?? 'Comprobante' }}</dt><dd><strong>{{ p.comprobante?.numeroCompleto ?? 'En proceso' }}</strong></dd></div>
-      <div><dt>Fecha</dt><dd>{{ p.pagadoEn | date: 'dd/MM/yyyy HH:mm' }}</dd></div>
-      <div><dt>Pagador</dt><dd>{{ p.pagadorNombre ?? '—' }}</dd></div>
-    </dl>
-    <div class="table-wrap" style="margin-top: 12px">
-      <table class="table" style="min-width: 0">
-        <thead><tr><th>Cuota</th><th>Aplicado</th><th>Saldo</th></tr></thead>
-        <tbody>@for (d of p.detalles; track d.id) { <tr><td>{{ d.cuotaDescripcion }}</td><td>S/ {{ d.montoAplicado | number: '1.2-2' }}</td><td>S/ {{ d.nuevoSaldoCuota | number: '1.2-2' }}</td></tr> }</tbody>
-      </table>
-    </div>
-    <ng-container footer>
-      <button type="button" class="btn" (click)="imprimir()">Imprimir</button>
-      <button type="button" class="btn btn-primary" (click)="cerrarRecibo()">Listo</button>
-    </ng-container>
-  </app-modal>
-}

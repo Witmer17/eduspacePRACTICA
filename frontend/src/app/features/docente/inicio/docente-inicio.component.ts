@@ -13,10 +13,15 @@ import { mensajeError } from '../../../core/utils/errores';
 import { CursoTarjetaComponent } from '../../../shared/aula/curso-tarjeta.component';
 
 export interface SeccionCursoDetalle {
+  /** Alumnos vigentes de la sección (matriculados y pre-matriculados; no retirados ni anulados). */
   alumnos: number;
+  /** De esos, cuántos aún no tienen la matrícula pagada. */
+  pendientes: number;
   aula?: string;
   turno?: string;
 }
+
+const VIGENTES = new Set(['MATRICULADO', 'PRE_MATRICULA', 'POR_APROBAR']);
 
 @Component({
   selector: 'app-docente-inicio',
@@ -98,7 +103,9 @@ export class DocenteInicioComponent implements OnInit {
           const info: Record<number, SeccionCursoDetalle> = {};
           ids.forEach((id, i) => {
             const s = secciones.find(x => x.id === id);
-            info[id] = { alumnos: listas[i]?.filter(a => a.estado === 'MATRICULADO').length ?? 0, aula: s?.aulaNombre, turno: s?.turno };
+            const vigentes = (listas[i] ?? []).filter(a => VIGENTES.has(a.estado));
+            const pendientes = vigentes.filter(a => a.estado !== 'MATRICULADO').length;
+            info[id] = { alumnos: vigentes.length, pendientes, aula: s?.aulaNombre, turno: s?.turno };
           });
           this.seccionInfo.set(info);
         });
@@ -123,7 +130,9 @@ export class DocenteInicioComponent implements OnInit {
   protected datosDe(seccionId: number): string[] {
     const i = this.infoCurso(seccionId);
     if (!i) return [];
-    return [`${i.alumnos} alumnos`, ...(i.aula ? [i.aula] : []), ...(i.turno ? ['turno ' + (i.turno === 'MANANA' ? 'mañana' : 'tarde')] : [])];
+    const alumnos = i.alumnos === 1 ? '1 alumno' : `${i.alumnos} alumnos`;
+    const pago = i.pendientes > 0 ? [`${i.pendientes} sin matrícula pagada`] : [];
+    return [alumnos, ...pago, ...(i.aula ? [i.aula] : []), ...(i.turno ? ['turno ' + (i.turno === 'MANANA' ? 'mañana' : 'tarde')] : [])];
   }
 
   protected infoCurso(seccionId: number): SeccionCursoDetalle | null {

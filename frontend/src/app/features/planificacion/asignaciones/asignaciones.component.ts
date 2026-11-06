@@ -46,7 +46,7 @@ export class AsignacionesComponent implements OnInit {
     this.api.docentes('', 0, 200).subscribe(p => this.docentes.set(p.contenido.filter(d => d.estado === 'ACTIVO')));
     this.api.anios().subscribe(a => {
       this.anios.set(a);
-      this.anioId.setValue((a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0);
+      this.anioId.setValue(a.find(x => x.estado === 'ACTIVO')?.id ?? 0);
       this.cargarSecciones();
     });
   }

@@ -22,6 +22,14 @@ public interface PagoRepository extends JpaRepository<Pago, Long> {
 
     List<Pago> findByCajaSesionId(Long cajaSesionId);
 
+    /** Pagos de apoderados por aprobar, del más antiguo al más reciente. */
+    List<Pago> findByEstadoOrderByPagadoEnAsc(String estado);
+
+    long countByEstado(String estado);
+
+    /** Lo que un apoderado pagó y aún está en revisión o fue rechazado. */
+    List<Pago> findTop20ByRegistradoPorAndEstadoInOrderByPagadoEnDesc(Long registradoPor, List<String> estados);
+
     /** Todo lo cobrado y no anulado: el dinero que entró a caja. */
     @Query("SELECT COALESCE(SUM(p.montoTotal), 0) FROM Pago p WHERE p.estado = 'CONFIRMADO'")
     BigDecimal totalCobrado();

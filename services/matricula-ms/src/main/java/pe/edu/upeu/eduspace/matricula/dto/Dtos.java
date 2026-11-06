@@ -15,7 +15,8 @@ public final class Dtos {
         @NotNull(message = "alumnoId es obligatorio") Long alumnoId,
         @NotNull(message = "seccionId es obligatorio") Long seccionId,
         @Pattern(regexp = "NUEVA|RATIFICACION|REINGRESO", message = "tipo debe ser NUEVA, RATIFICACION o REINGRESO") String tipo,
-        @Size(max = 500) String observaciones) {}
+        @Size(max = 500) String observaciones,
+        @Pattern(regexp = "MENSUAL|BIMESTRAL|SEMESTRAL|ANUAL", message = "planPago debe ser MENSUAL, BIMESTRAL, SEMESTRAL o ANUAL") String planPago) {}
 
     public record TrasladoRequest(
         @NotNull(message = "nuevaSeccionId es obligatorio") Long nuevaSeccionId,
@@ -56,7 +57,7 @@ public final class Dtos {
                                     Long gradoId, Long seccionId, Long campaniaId, String tipo, String estado,
                                     Long matriculaAnteriorId, LocalDateTime venceEn, String observaciones,
                                     LocalDateTime creadoEn, LocalDateTime confirmadaEn, LocalDateTime cerradaEn,
-                                    String motivoCierre, LocalDateTime pagadaEn, LocalDateTime aprobadaEn) {}
+                                    String motivoCierre, LocalDateTime pagadaEn, LocalDateTime aprobadaEn, String planPago) {}
 
     public record MatriculaDetalleResponse(MatriculaResponse matricula, List<RequisitoResponse> requisitos,
                                            List<HistorialResponse> historial) {}

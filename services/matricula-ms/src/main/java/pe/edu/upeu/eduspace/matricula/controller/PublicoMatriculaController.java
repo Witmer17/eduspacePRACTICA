@@ -29,6 +29,12 @@ public class PublicoMatriculaController {
         return servicio.oferta();
     }
 
+    @GetMapping("/descuento/{codigo}")
+    @Operation(summary = "Valida un código de descuento (404 si no existe o ya no está vigente)")
+    public DescuentoVista descuento(@PathVariable String codigo) {
+        return servicio.descuentoPorCodigo(codigo);
+    }
+
     @PostMapping
     @Operation(summary = "Registra al alumno y a su apoderado y reserva el cupo; devuelve el token del trámite")
     public ResponseEntity<Inicio> iniciar(@Valid @RequestBody Solicitud solicitud) {

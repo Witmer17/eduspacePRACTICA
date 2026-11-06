@@ -10,6 +10,8 @@ import {
   EstadoMatricula,
   Matricula,
   MatriculaDetalle,
+  OpcionPlanPago,
+  PlanPago,
   RatificacionResultado,
   Requisito,
   TIPOS_MATRICULA,
@@ -18,6 +20,7 @@ import {
 import { AlumnoService } from '../../core/services/alumno.service';
 import { MatriculaService } from '../../core/services/matricula.service';
 import { NotificationService } from '../../core/services/notification.service';
+import { PagoConfigService } from '../../core/services/pago-config.service';
 import { PlanificacionService } from '../../core/services/planificacion.service';
 import { mensajeError } from '../../core/utils/errores';
 import { ModalComponent } from '../../shared/components/modal/modal.component';
@@ -40,6 +43,7 @@ export class MatriculasComponent implements OnInit {
   private readonly alumnosApi = inject(AlumnoService);
   private readonly plan = inject(PlanificacionService);
   private readonly avisos = inject(NotificationService);
+  private readonly pagoConfig = inject(PagoConfigService);
   private readonly fb = inject(FormBuilder);
   private readonly ruta = inject(ActivatedRoute);
 
@@ -72,8 +76,12 @@ export class MatriculasComponent implements OnInit {
   protected readonly formNueva = this.fb.nonNullable.group({
     seccionId: [0, [Validators.required, Validators.min(1)]],
     tipo: ['NUEVA' as TipoMatricula, Validators.required],
+    planPago: ['MENSUAL' as PlanPago, Validators.required],
     observaciones: ['']
   });
+  /** Formas de pago de las pensiones con su descuento (semestral 5 %, anual 10 %: lo manda el servidor). */
+  protected readonly planesPago = signal<OpcionPlanPago[]>([]);
+  protected readonly textoPlan = (p: OpcionPlanPago) => p.descuentoPorcentaje > 0 ? `${p.etiqueta} (${p.descuentoPorcentaje} % de descuento)` : p.etiqueta;
 
   protected readonly formMotivo = this.fb.nonNullable.group({ motivo: ['', [Validators.required, Validators.maxLength(255)]] });
   protected readonly formTraslado = this.fb.nonNullable.group({
@@ -89,11 +97,16 @@ export class MatriculasComponent implements OnInit {
   protected readonly seccionesDestino = signal<Seccion[]>([]);
 
   ngOnInit(): void {
+    this.pagoConfig.planesPago().subscribe({
+      next: p => this.planesPago.set(p),
+      error: () => this.planesPago.set([{ id: 'MENSUAL', etiqueta: 'Mensual', descuentoPorcentaje: 0, cuotasEnDiezMeses: 10 }])
+    });
     this.plan.grados().subscribe(g => this.grados.set(g));
     this.plan.anios().subscribe(a => {
       this.anios.set(a);
-      const activo = a.find(x => x.estado === 'ACTIVO') ?? a[0];
-      const q = this.ruta.snapshot.queryParamMap;
+      const activo = a.find(x => x.estado === 'ACTIVO');
+      this.sinActivo = !activo;
+      const q =this.ruta.snapshot.queryParamMap;
       // Enlaces desde el inicio: ?estado=PRE_MATRICULA filtra la lista y ?nueva=1 abre el formulario.
       this.filtro.patchValue({ anioId: activo?.id ?? 0, ...(q.get('estado') ? { estado: q.get('estado') as EstadoMatricula } : {}) });
       this.alCambiarAnio();
@@ -114,7 +127,8 @@ export class MatriculasComponent implements OnInit {
   protected alCambiarAnio(): void {
     const anioId = this.filtro.controls.anioId.value;
     this.filtro.patchValue({ gradoId: 0, seccionId: 0 });
-    this.plan.secciones(anioId || undefined).subscribe(s => this.secciones.set(s));
+    if (this.sinActivo && !anioId) this.secciones.set([]);
+    else this.plan.secciones(anioId || undefined).subscribe(s => this.secciones.set(s));
     this.cargar(0);
   }
 
@@ -136,8 +150,12 @@ export class MatriculasComponent implements OnInit {
     if (p >= 0 && p < this.paginas()) this.cargar(p);
   }
 
+  /** No hay periodo activo: mientras no se elija un año a mano, la lista queda vacía (no se mezclan las matrículas de todos los años). */
+  private sinActivo = false;
+
   protected cargar(pagina = this.pagina()): void {
     const f = this.filtro.getRawValue();
+    if (this.sinActivo && !f.anioId) { this.matriculas.set([]); this.total.set(0); this.paginas.set(1); this.pagina.set(0); this.cargando.set(false); return; }
     this.cargando.set(true);
     this.api
       .listar({ anioId: f.anioId || undefined, gradoId: f.gradoId || undefined, seccionId: f.seccionId || undefined, estado: f.estado, texto: f.texto.trim() || undefined, page: pagina })
@@ -187,7 +205,7 @@ export class MatriculasComponent implements OnInit {
 
   // --- nueva matrícula ---
   protected nueva(): void {
-    this.formNueva.reset({ seccionId: 0, tipo: 'NUEVA', observaciones: '' });
+    this.formNueva.reset({ seccionId: 0, tipo: 'NUEVA', planPago: 'MENSUAL', observaciones: '' });
     this.alumnoElegido.set(null);
     this.resultadosAlumno.set([]);
     this.busquedaAlumno.setValue('');
@@ -216,7 +234,7 @@ export class MatriculasComponent implements OnInit {
       return;
     }
     const v = this.formNueva.getRawValue();
-    this.ejecutar(this.api.crear({ alumnoId: alumno.id, seccionId: v.seccionId, tipo: v.tipo, observaciones: v.observaciones.trim() || undefined }), m => {
+    this.ejecutar(this.api.crear({ alumnoId: alumno.id, seccionId: v.seccionId, tipo: v.tipo, planPago: v.planPago, observaciones: v.observaciones.trim() || undefined }), m => {
       this.avisos.success(`Pre-matrícula ${m.codigo} creada. Se confirma al registrarse el pago de la matrícula.`);
       this.cerrar();
       this.cargar(0);

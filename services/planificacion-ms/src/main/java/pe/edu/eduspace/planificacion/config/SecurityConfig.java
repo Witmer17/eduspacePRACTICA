@@ -42,6 +42,11 @@ public class SecurityConfig {
                     }
                     // Contratos y pagos del personal: sensibles, solo ADMIN también para leer (antes que la regla general de GET).
                     auth.requestMatchers("/api/v1/planificacion/rrhh/**").hasRole("ADMIN");
+                    // Pago al personal con aprobación: caja solicita, el administrador aprueba o rechaza; ambos ven la planilla.
+                    auth.requestMatchers(HttpMethod.POST, "/api/v1/planificacion/pago-personal/pagos/*/solicitar").hasRole("CAJERO");
+                    auth.requestMatchers(HttpMethod.POST, "/api/v1/planificacion/pago-personal/pagos/*/aprobar",
+                            "/api/v1/planificacion/pago-personal/pagos/*/rechazar").hasRole("ADMIN");
+                    auth.requestMatchers(HttpMethod.GET, "/api/v1/planificacion/pago-personal/**").hasAnyRole("ADMIN", "CAJERO");
                     // Asistencia del personal: ADMIN y SECRETARIA, también para leer.
                     auth.requestMatchers("/api/v1/planificacion/asistencia-personal/**").hasAnyRole("ADMIN", "SECRETARIA");
                     // Lo propio de cada persona del personal (su contrato, sus pagos…): solo lectura, solo personal; la persona sale del token.

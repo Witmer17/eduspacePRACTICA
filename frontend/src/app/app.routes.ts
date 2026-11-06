@@ -115,6 +115,18 @@ export const routes: Routes = [
         loadComponent: () => import('./features/alumnos/alumnos.component').then(m => m.AlumnosComponent)
       },
       {
+        path: 'documentos',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/documentos/documentos.component').then(m => m.DocumentosComponent)
+      },
+      {
+        path: 'apoderados',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/apoderados/apoderados.component').then(m => m.ApoderadosComponent)
+      },
+      {
         path: 'alumnos/importar',
         canActivate: [roleGuard],
         data: { roles: PERSONAL },
@@ -171,7 +183,7 @@ export const routes: Routes = [
       {
         path: 'matriculas/aprobaciones',
         canActivate: [roleGuard],
-        data: { roles: SOLO_ADMIN },
+        data: { roles: PERSONAL },
         loadComponent: () => import('./features/matriculas/aprobaciones.component').then(m => m.AprobacionesComponent)
       },
       {
@@ -295,10 +307,47 @@ export const routes: Routes = [
         loadComponent: () => import('./features/familia/pagos/familia-pagos.component').then(m => m.FamiliaPagosComponent)
       },
       {
+        path: 'secretaria',
+        canActivate: [roleGuard],
+        data: { roles: ['SECRETARIA'] },
+        loadComponent: () => import('./features/secretaria/secretaria-inicio.component').then(m => m.SecretariaInicioComponent)
+      },
+      {
+        path: 'matricula/asistente',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/matriculas/asistente-matricula.component').then(m => m.AsistenteMatriculaComponent)
+      },
+      // Caja (barra horizontal): Inicio = ventanilla de cobro; Alumnos = cuentas, morosos y cobranza; Personal = pago al personal.
+      {
         path: 'caja',
         canActivate: [roleGuard],
-        data: { roles: ['CAJERO'] },
+        data: { roles: ['CAJERO', 'ADMIN'] },
         loadComponent: () => import('./features/caja/caja.component').then(m => m.CajaComponent)
+      },
+      {
+        path: 'caja/alumnos',
+        canActivate: [roleGuard],
+        data: { roles: ['CAJERO', 'ADMIN'] },
+        loadComponent: () => import('./features/pagos/cuentas/cuentas.component').then(m => m.CuentasComponent)
+      },
+      {
+        path: 'caja/alumnos/morosos',
+        canActivate: [roleGuard],
+        data: { roles: ['CAJERO', 'ADMIN'] },
+        loadComponent: () => import('./features/pagos/morosos/morosos.component').then(m => m.MorososComponent)
+      },
+      {
+        path: 'caja/alumnos/cobranza',
+        canActivate: [roleGuard],
+        data: { roles: ['CAJERO', 'ADMIN'] },
+        loadComponent: () => import('./features/pagos/cobranza/cobranza.component').then(m => m.CobranzaComponent)
+      },
+      {
+        path: 'caja/personal',
+        canActivate: [roleGuard],
+        data: { roles: ['CAJERO', 'ADMIN'] },
+        loadComponent: () => import('./features/caja/caja-personal.component').then(m => m.CajaPersonalComponent)
       },
       {
         path: 'planificacion/panel',
@@ -353,6 +402,12 @@ export const routes: Routes = [
         canActivate: [roleGuard],
         data: { roles: PERSONAL },
         loadComponent: () => import('./features/configuracion/areas/areas-config.component').then(m => m.AreasConfigComponent)
+      },
+      {
+        path: 'configuracion/horarios',
+        canActivate: [roleGuard],
+        data: { roles: PERSONAL },
+        loadComponent: () => import('./features/configuracion/horarios/horarios-docente.component').then(m => m.HorariosDocenteComponent)
       },
       {
         path: 'configuracion/estructura',

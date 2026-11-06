@@ -28,6 +28,8 @@ public class MatriculaEvent {
     private String tipo;
     private Long seccionAnteriorId;
     private String motivo;
+    /** Forma de pago de las pensiones acordada al matricular: pago-ms genera las cuotas según el plan. */
+    private String planPago;
     private Long responsablePagoUsuarioId;
     private String responsablePagoNombre;
 }

@@ -1,7 +1,7 @@
 import { codigoDeArea } from './areas/areas-config.component';
 import { ejemploCodigosDe } from './colegio/pabellones.component';
-import { Aula } from '../../core/models/planificacion.model';
-import { MAX_SECCIONES, capacidadSugerida, emblemaOferta, mismoConjunto, nombresSecciones, opcionesAula, reemplazar, resumenConfig } from './grados/grados-oferta.component';
+import { Aula, GradoOferta } from '../../core/models/planificacion.model';
+import { MAX_SECCIONES, capacidadSugerida, emblemaOferta, filaValida, filasParaTodos, mismoConjunto, nombresSecciones, opcionesAula, reemplazar, resumenConfig, totalesTodos } from './grados/grados-oferta.component';
 
 const aula = (id: number, codigo: string, capacidad: number, pabellonId: number | null = null, extra: Partial<Aula> = {}): Aula =>
   ({ id, codigo, nombre: codigo, tipo: 'AULA', capacidad, activo: true, pabellonId, pabellonNombre: pabellonId ? 'P' + pabellonId : null, ...extra });
@@ -57,6 +57,45 @@ describe('configuración: aulas que se crean con un pabellón', () => {
     expect(ejemploCodigosDe('Pabellón Ñ', 2)).toBe('PABELLONN-01 y PABELLONN-02');
     expect(ejemploCodigosDe('A', 0)).toBe('—');
     expect(ejemploCodigosDe('???', 1)).toBe('P-01');
+  });
+});
+
+describe('configuración: seleccionar todos los grados con su tabla', () => {
+  const oferta = [
+    { nivelCodigo: 'INICIAL', nivelNombre: 'Inicial', numero: 1, nombre: '3 años', seleccionado: false, enUso: false },
+    { nivelCodigo: 'PRIMARIA', nivelNombre: 'Primaria', numero: 1, nombre: '1° de Primaria', seleccionado: true, enUso: true, detalleUso: '2 secciones' },
+    { nivelCodigo: 'PRIMARIA', nivelNombre: 'Primaria', numero: 2, nombre: '2° de Primaria', seleccionado: false, enUso: false }
+  ] as GradoOferta[];
+
+  it('arma una fila por grado: marcados, con secciones/turno/vacantes por defecto, y los que ya están en uso quedan fijos', () => {
+    const filas = filasParaTodos(oferta, new Set(['PRIMARIA:1']), {});
+    expect(filas.map(f => [f.nombre, f.incluir, f.fija])).toEqual([['3 años', true, false], ['1° de Primaria', false, true], ['2° de Primaria', true, false]]);
+    expect(filas[0]).toMatchObject({ secciones: 1, turno: 'MANANA', capacidad: 20 }); // Inicial: 20 vacantes
+    expect(filas[2].capacidad).toBe(30);
+    expect(filas[1].detalle).toBe('2 secciones');
+  });
+
+  it('respeta lo que ya se había establecido para un grado', () => {
+    const filas = filasParaTodos(oferta, new Set(), { 'PRIMARIA:2': { secciones: 3, turno: 'TARDE', capacidad: 25, aulas: [] } });
+    expect(filas[2]).toMatchObject({ secciones: 3, turno: 'TARDE', capacidad: 25 });
+  });
+
+  it('valida las secciones (0 a 8) y las vacantes (1 a 60)', () => {
+    expect(filaValida({ secciones: 0, capacidad: 1 })).toBe(true);
+    expect(filaValida({ secciones: MAX_SECCIONES, capacidad: 60 })).toBe(true);
+    expect(filaValida({ secciones: MAX_SECCIONES + 1, capacidad: 30 })).toBe(false);
+    expect(filaValida({ secciones: 1, capacidad: 0 })).toBe(false);
+    expect(filaValida({ secciones: 1, capacidad: 61 })).toBe(false);
+    expect(filaValida({ secciones: 1.5, capacidad: 30 })).toBe(false);
+  });
+
+  it('suma grados, secciones y vacantes solo de las filas marcadas y no fijas', () => {
+    const filas = filasParaTodos(oferta, new Set(['PRIMARIA:1']), {});
+    filas[0].secciones = 2; filas[0].capacidad = 20;
+    filas[2].secciones = 3; filas[2].capacidad = 30;
+    expect(totalesTodos(filas)).toEqual({ grados: 2, secciones: 5, vacantes: 2 * 20 + 3 * 30 });
+    filas[2].incluir = false;
+    expect(totalesTodos(filas)).toEqual({ grados: 1, secciones: 2, vacantes: 40 });
   });
 });
 

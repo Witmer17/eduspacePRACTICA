@@ -15,13 +15,14 @@ import pe.edu.upeu.eduspace.matricula.event.PagoConfirmadoEvent;
 import pe.edu.upeu.eduspace.matricula.exception.ResourceNotFoundException;
 import pe.edu.upeu.eduspace.matricula.repository.EventoProcesadoRepository;
 import pe.edu.upeu.eduspace.matricula.repository.HistorialRepository;
+import pe.edu.upeu.eduspace.matricula.service.MatriculaEnLineaService;
 import pe.edu.upeu.eduspace.matricula.service.MatriculaService;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 
 /**
- * pago.confirmado -> confirma la matrícula (solo concepto MATRICULA). pago.anulado -> deja constancia en el
+ * pago.confirmado -> si la matrícula queda pagada por completo, la genera (solo concepto MATRICULA; la matrícula en línea queda por aprobar). pago.anulado -> deja constancia en el
  * historial; la reversión es una decisión manual de secretaría.
  */
 @Slf4j
@@ -33,15 +34,17 @@ public class PagoEventConsumer {
     private final EventoProcesadoRepository eventoRepo;
     private final HistorialRepository historialRepo;
     private final MatriculaService matriculaService;
+    private final MatriculaEnLineaService enLinea;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate tx;
 
     public PagoEventConsumer(EventoProcesadoRepository eventoRepo, HistorialRepository historialRepo,
-                             MatriculaService matriculaService, ObjectMapper objectMapper,
+                             MatriculaService matriculaService, MatriculaEnLineaService enLinea, ObjectMapper objectMapper,
                              PlatformTransactionManager txManager) {
         this.eventoRepo = eventoRepo;
         this.historialRepo = historialRepo;
         this.matriculaService = matriculaService;
+        this.enLinea = enLinea;
         this.objectMapper = objectMapper;
         this.tx = new TransactionTemplate(txManager);
     }
@@ -86,6 +89,18 @@ public class PagoEventConsumer {
         }
     }
 
+    /**
+     * Una matrícula en línea con descuento por hermano queda MATRICULADA al pagarse (en caja o en la cuenta del apoderado): se entrega el acceso y la
+     * constancia por correo. Va después de confirmar la transacción y no deshace el pago si falla (se puede reenviar el acceso desde la matrícula).
+     */
+    private void entregarAcceso(Long matriculaId) {
+        try {
+            enLinea.accesoTrasPago(matriculaId);
+        } catch (Exception e) {
+            log.warn("No se pudo entregar el acceso de la matrícula {} tras el pago: {}", matriculaId, e.getMessage());
+        }
+    }
+
     private void procesarConReintento(EventoSobre<PagoConfirmadoEvent> sobre, PagoConfirmadoEvent ev, boolean anulado) {
         ResourceNotFoundException ultimo = null;
         for (int i = 1; i <= REINTENTOS_MATRICULA_NO_VISIBLE; i++) {
@@ -97,11 +112,12 @@ public class PagoEventConsumer {
                             .motivo("Pago de matrícula " + ev.getPagoId() + " anulado en pago-ms; requiere decisión de secretaría.").build());
                         log.warn("ALERTA SECRETARÍA: pago {} de la matrícula {} fue anulado.", ev.getPagoId(), ev.getMatriculaId());
                     } else {
-                        matriculaService.confirmarPorPago(ev.getMatriculaId(), ev.getPagoId());
+                        matriculaService.confirmarYGenerarPorPago(ev.getMatriculaId(), ev.getPagoId());
                     }
                     eventoRepo.save(EventoProcesado.builder()
                         .eventId(sobre.getEventId()).eventType(sobre.getEventType() != null ? sobre.getEventType() : "pago.*").build());
                 });
+                if (!anulado) entregarAcceso(ev.getMatriculaId());
                 return;
             } catch (ResourceNotFoundException e) {
                 ultimo = e;

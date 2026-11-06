@@ -1,12 +1,18 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { catchError, forkJoin, of } from 'rxjs';
 import { Apoderado, AlumnoResumen, ESTADOS_ALUMNO, EstadoAlumno, PARENTESCOS, Parentesco } from '../../core/models/alumno.model';
+import { Matricula } from '../../core/models/matricula.model';
+import { Anio } from '../../core/models/planificacion.model';
 import { AlumnoService } from '../../core/services/alumno.service';
+import { MatriculaService } from '../../core/services/matricula.service';
+import { PlanificacionService } from '../../core/services/planificacion.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { mensajeError } from '../../core/utils/errores';
 import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
+import { CLASE_SITUACION, Situacion, TEXTO_SITUACION, puedeMatricular, situacionDe } from './matricula-alumno';
 
 const CLASE_ESTADO: Record<EstadoAlumno, string> = {
   ACTIVO: 'badge-ok', INACTIVO: 'badge-gray', RETIRADO: 'badge-danger', TRASLADADO: 'badge-violet', EGRESADO: 'badge'
@@ -15,7 +21,13 @@ const CLASE_ESTADO: Record<EstadoAlumno, string> = {
 @Component({
   selector: 'app-alumnos',
   imports: [ReactiveFormsModule, RouterLink, ModalComponent, PageHeaderComponent],
-  templateUrl: './alumnos.component.html'
+  templateUrl: './alumnos.component.html',
+  styles: `
+    .casilla-matricular { display: flex; align-items: flex-start; gap: 10px; margin-top: 14px; padding: 12px 14px; border: 1.5px solid var(--primary); border-radius: 12px; background: var(--primary-soft); cursor: pointer; }
+    .casilla-matricular input { width: 18px; height: 18px; margin-top: 2px; }
+    .casilla-matricular span { display: flex; flex-direction: column; }
+    .casilla-matricular small { color: var(--ink-2); }
+  `
 })
 export class AlumnosComponent implements OnInit {
   private readonly api = inject(AlumnoService);
@@ -23,6 +35,8 @@ export class AlumnosComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly ruta = inject(ActivatedRoute);
+  private readonly matriculas = inject(MatriculaService);
+  private readonly plan = inject(PlanificacionService);
 
   protected readonly estados = ESTADOS_ALUMNO;
   protected readonly parentescos = PARENTESCOS;
@@ -60,6 +74,8 @@ export class AlumnosComponent implements OnInit {
     colegioProcedencia: [''],
     parentesco: ['MADRE' as Parentesco, Validators.required]
   });
+  /** Al registrar un alumno nuevo se ofrece matricularlo enseguida (abre el asistente de matrícula). */
+  protected readonly matricularAhora = this.fb.nonNullable.control(true);
 
   protected readonly formApoderado = this.fb.nonNullable.group({
     tipoDocumento: ['DNI'],
@@ -70,7 +86,35 @@ export class AlumnosComponent implements OnInit {
     email: ['', Validators.email]
   });
 
+  // --- matrícula del año activo: cómo está cada alumno; «Matricular» abre el asistente de matrícula ---
+  protected readonly anioActivo = signal<Anio | null>(null);
+  private readonly matriculasAnio = signal<Matricula[]>([]);
+  protected readonly matriculaCargada = signal(false);
+  protected readonly textoSituacion = TEXTO_SITUACION;
+  protected readonly claseSituacion = CLASE_SITUACION;
+
+  protected situacion(a: AlumnoResumen): Situacion {
+    return situacionDe(a.id, this.matriculasAnio());
+  }
+
+  protected opcionMatricular(a: AlumnoResumen): { puede: boolean; motivo?: string } {
+    return puedeMatricular(a.estado, this.situacion(a), !!this.anioActivo());
+  }
+
+  private cargarMatriculas(): void {
+    this.plan.anios().pipe(catchError(() => of(null))).subscribe(anios => {
+      const activo = anios?.find(x => x.estado === 'ACTIVO') ?? null;
+      this.anioActivo.set(activo);
+      if (!activo) { this.matriculaCargada.set(true); return; }
+      this.matriculas.listar({ anioId: activo.id, size: 100 }).pipe(catchError(() => of(null))).subscribe(p => {
+        this.matriculasAnio.set(p?.contenido ?? []);
+        this.matriculaCargada.set(true);
+      });
+    });
+  }
+
   ngOnInit(): void {
+    this.cargarMatriculas();
     this.cargar(0);
     // Enlace desde el inicio: ?nuevo=1 abre el formulario de alta.
     if (this.ruta.snapshot.queryParamMap.get('nuevo')) this.nuevo();
@@ -117,6 +161,7 @@ export class AlumnosComponent implements OnInit {
     this.resultadosApoderado.set([]);
     this.busquedaApoderado.setValue('');
     this.errorForm.set(null);
+    this.matricularAhora.setValue(true);
     this.abierto.set(true);
   }
 
@@ -199,9 +244,15 @@ export class AlumnosComponent implements OnInit {
       .subscribe({
         next: alumno => {
           this.guardando.set(false);
-          this.avisos.success(`Alumno ${alumno.codigo} registrado. Sube y verifica sus documentos para poder matricularlo.`);
           this.cerrar();
-          this.router.navigate(['/alumnos', alumno.id]);
+          if (this.matricularAhora.value) {
+            // Sigue la matrícula: ya tiene apoderado, así que el asistente continúa por los documentos.
+            this.avisos.success(`Alumno ${alumno.codigo} registrado. Sigamos con su matrícula.`);
+            this.router.navigate(['/matricula/asistente'], { queryParams: { alumnoId: alumno.id, paso: 'documentos' } });
+          } else {
+            this.avisos.success(`Alumno ${alumno.codigo} registrado. Sube y verifica sus documentos para poder matricularlo.`);
+            this.router.navigate(['/alumnos', alumno.id]);
+          }
         },
         error: e => {
           this.guardando.set(false);

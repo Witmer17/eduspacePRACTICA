@@ -27,6 +27,20 @@ public class InternalConsultaServiceImpl implements InternalConsultaService {
     }
 
     @Override
+    public List<pe.edu.eduspace.alumnos.dto.ApoderadoResponse> apoderadosDe(Long alumnoId) {
+        if (!alumnoRepository.existsById(alumnoId)) {
+            throw ResourceNotFoundException.of("Alumno", alumnoId);
+        }
+        return vinculoRepository.findByAlumno(alumnoId).stream().map(v -> mapper.toResponse(v.getApoderado())).toList();
+    }
+
+    @Override
+    public AlumnoBasicoResponse porDocumento(String numeroDocumento) {
+        return alumnoRepository.findFirstByNumeroDocumentoOrderByIdAsc(numeroDocumento == null ? "" : numeroDocumento.trim()).map(mapper::toBasico)
+                .orElseThrow(() -> new ResourceNotFoundException("No hay un alumno con ese documento"));
+    }
+
+    @Override
     public AlumnoUsuarioResponse alumnoDeUsuario(Long usuarioId) {
         return alumnoRepository.findByUsuarioId(usuarioId).map(a -> new AlumnoUsuarioResponse(a.getId()))
                 .orElseThrow(() -> new ResourceNotFoundException("El usuario " + usuarioId + " no es un alumno"));

@@ -53,6 +53,20 @@ public class DocenteServiceImpl implements DocenteService {
 
     @Override
     @Transactional(readOnly = true)
+    public PageResponse<DocenteResponse> buscar(String q, Long areaId, boolean todas, pe.edu.eduspace.planificacion.entity.EstadoDocente estado, Pageable pageable) {
+        if (estado == null) {
+            return buscar(q, areaId, todas, pageable);
+        }
+        String texto = q == null ? "" : q.trim();
+        if (areaId == null && todas) {
+            return PageResponse.of(repository.buscarPorEstado(texto, estado, pageable).map(mapper::toResponse));
+        }
+        Long area = areaId != null ? areaId : areaDocencia().getId();
+        return PageResponse.of(repository.buscarPorAreaYEstado(texto, area, estado, pageable).map(mapper::toResponse));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DocenteResponse obtener(Long id) {
         return mapper.toResponse(buscar(id));
     }

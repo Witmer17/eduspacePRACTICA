@@ -53,7 +53,8 @@ export class SeccionesComponent implements OnInit {
   ngOnInit(): void {
     this.api.anios().subscribe(a => {
       this.anios.set(a);
-      const activo = a.find(x => x.estado === 'ACTIVO') ?? a[0];
+      const activo = a.find(x => x.estado === 'ACTIVO');
+      this.sinActivo = !activo;
       this.filtro.patchValue({ anioId: activo?.id ?? 0 });
       this.cargar();
     });
@@ -62,8 +63,12 @@ export class SeccionesComponent implements OnInit {
     this.api.docentes('', 0, 200).subscribe(p => this.docentes.set(p.contenido.filter(d => d.estado === 'ACTIVO')));
   }
 
+  /** No hay periodo activo: mientras no se elija un año a mano, la lista queda vacía (no se mezclan los de todos los años). */
+  private sinActivo = false;
+
   protected cargar(): void {
     const { anioId, gradoId } = this.filtro.getRawValue();
+    if (this.sinActivo && !anioId) { this.secciones.set([]); this.cargando.set(false); return; }
     this.cargando.set(true);
     this.api.secciones(anioId || undefined, gradoId || undefined).subscribe({
       next: s => {

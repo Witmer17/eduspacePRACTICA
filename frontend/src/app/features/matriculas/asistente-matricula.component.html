@@ -1,0 +1,325 @@
+<div class="page">
+  <app-page-header titulo="Asistente de matrícula" [subtitulo]="anio() ? 'Año académico ' + anio()!.nombre + ' · sigue los pasos hasta crear la pre-matrícula' : 'Matricula a un alumno paso a paso'" />
+
+  @if (!cargandoAnio() && !anio()) {
+    <div class="aviso aviso-warn" role="alert">No hay un año académico activo, así que no se puede matricular. Pide al administrador que abra el periodo.</div>
+  } @else {
+
+    <!-- Los pasos -->
+    <ol class="pasos" aria-label="Pasos de la matrícula">
+      @for (p of pasos; track p.id; let i = $index) {
+        <li class="paso" [class.actual]="paso() === p.id" [class.hecho]="i < indice(paso()) || resultado()" [attr.aria-current]="paso() === p.id ? 'step' : null">
+          <span class="num">{{ i < indice(paso()) || resultado() ? '✓' : i + 1 }}</span>
+          <span class="txt"><strong>{{ p.titulo }}</strong><small>{{ p.ayuda }}</small></span>
+        </li>
+      }
+    </ol>
+
+    <section class="card asistente-cuerpo">
+      <div class="card-body">
+
+        @if (resultado(); as m) {
+          <!-- Listo -->
+          <div class="listo">
+            <div class="aviso aviso-ok" role="status"><strong>Pre-matrícula {{ m.codigo }} creada</strong> para {{ nombreAlumno() }}.</div>
+            @if (conHermano()) {
+              <div class="descuento-estado" role="status">
+                <strong>Descuento por hermano</strong>
+                @if (resolviendoSolicitud() && !solicitud()) { <p class="muted">Registrando la solicitud de descuento…</p> }
+                @if (solicitud(); as s) {
+                  @if (s.estado === 'PENDIENTE') {
+                    <p>Solicitud «{{ s.descuentoNombre }}» registrada. Mientras no la apruebes, la matrícula no se puede pagar.</p>
+                    <button type="button" class="btn btn-primary btn-sm" [disabled]="resolviendoSolicitud()" (click)="aprobarDescuento()">{{ resolviendoSolicitud() ? 'Aprobando…' : 'Aprobar el descuento ahora' }}</button>
+                    <span class="muted"> o déjala en «Descuentos por aprobar» del inicio.</span>
+                  } @else if (s.estado === 'APROBADA') {
+                    <p><span class="badge badge-ok">Aprobado</span> «{{ s.descuentoNombre }}» aplicado: la matrícula pasó de S/ {{ s.matriculaImporte }} a S/ {{ s.matriculaConDescuento }}.</p>
+                  } @else {
+                    <p><span class="badge badge-danger">Rechazado</span> {{ s.motivoResolucion }}</p>
+                  }
+                }
+                @if (errorSolicitud()) {
+                  <div class="aviso aviso-warn" role="alert">{{ errorSolicitud() }}<br />La pre-matrícula sí quedó creada. Puedes pedir el descuento después desde Pagos del apoderado.</div>
+                }
+              </div>
+            }
+            <ol class="siguientes">
+              <li><strong>Pago de la matrícula.</strong> La familia paga en Caja (o el apoderado en línea); la matrícula queda como «por aprobar».</li>
+              <li><strong>Aprobación.</strong> Tú la revisas en «Por aprobar»: al aprobarla el alumno queda matriculado y se generan sus pensiones.</li>
+            </ol>
+            <div class="toolbar">
+              <a class="btn btn-primary" routerLink="/matriculas/aprobaciones">Ir a «Por aprobar»</a>
+              <a class="btn" routerLink="/matriculas">Ver matrículas</a>
+              <button type="button" class="btn" (click)="otroAlumno()">Matricular a otro alumno</button>
+            </div>
+          </div>
+        } @else {
+
+          @switch (paso()) {
+
+            @case ('alumno') {
+              <h2>¿A quién vas a matricular?</h2>
+              <div class="modos" role="group" aria-label="Alumno nuevo o ya registrado">
+                <button type="button" class="modo" [class.on]="modo() === 'existente'" (click)="cambiarModo('existente')">Ya está registrado</button>
+                <button type="button" class="modo" [class.on]="modo() === 'nuevo'" (click)="cambiarModo('nuevo')">Es un alumno nuevo</button>
+              </div>
+
+              @if (modo() === 'existente') {
+                <app-buscador-alumno [soloActivos]="false" (elegidoAlumno)="elegirAlumno($event)" />
+                @if (verificando()) { <p class="muted">Revisando su situación…</p> }
+                @if (alumno(); as a) {
+                  <div class="ficha-mini">
+                    <strong>{{ a.nombreCompleto }}</strong>
+                    <span class="muted">{{ a.codigo }} · {{ a.tipoDocumento ?? 'Doc.' }} {{ a.numeroDocumento }}</span>
+                  </div>
+                  @if (bloqueo()) { <div class="aviso aviso-warn" role="status">{{ bloqueo() }}</div> }
+                  @else { <div class="aviso aviso-ok" role="status">Se puede matricular este año.</div> }
+                }
+              } @else {
+                <form [formGroup]="formAlumno" class="form-grid" novalidate>
+                  <div class="field"><label for="a-tdoc">Tipo de documento</label>
+                    <select id="a-tdoc" formControlName="tipoDocumento"><option value="DNI">DNI</option><option value="CE">Carné de extranjería</option><option value="PASAPORTE">Pasaporte</option></select></div>
+                  <div class="field"><label for="a-doc">N.º de documento *</label><input id="a-doc" formControlName="numeroDocumento" maxlength="20" /></div>
+                  <div class="field"><label for="a-nom">Nombres *</label><input id="a-nom" formControlName="nombres" /></div>
+                  <div class="field"><label for="a-ap">Apellido paterno *</label><input id="a-ap" formControlName="apellidoPaterno" /></div>
+                  <div class="field"><label for="a-am">Apellido materno</label><input id="a-am" formControlName="apellidoMaterno" /></div>
+                  <div class="field"><label for="a-nac">Fecha de nacimiento *</label><input id="a-nac" type="date" formControlName="fechaNacimiento" /></div>
+                  <div class="field"><label for="a-sexo">Sexo *</label>
+                    <select id="a-sexo" formControlName="sexo"><option value="">Elegir…</option><option value="F">Femenino</option><option value="M">Masculino</option></select></div>
+                  <div class="field"><label for="a-dir">Dirección</label><input id="a-dir" formControlName="direccion" /></div>
+                  <div class="field"><label for="a-dis">Distrito</label><input id="a-dis" formControlName="distrito" /></div>
+                  <div class="field"><label for="a-tel">Teléfono</label><input id="a-tel" formControlName="telefono" /></div>
+                  <div class="field"><label for="a-mail">Correo</label><input id="a-mail" type="email" formControlName="email" /></div>
+                  <div class="field"><label for="a-col">Colegio de procedencia</label><input id="a-col" formControlName="colegioProcedencia" /></div>
+                </form>
+                <p class="muted nota">Se guarda al terminar el siguiente paso, cuando indiques a su apoderado.</p>
+              }
+            }
+
+            @case ('familia') {
+              <h2>Su familia</h2>
+              @if (vinculos().length) {
+                <p class="muted">Estos apoderados ya están registrados para {{ nombreAlumno() }}:</p>
+                <ul class="vinculos">
+                  @for (v of vinculos(); track v.id) {
+                    <li>
+                      <div><strong>{{ v.apoderado.apellidos }}, {{ v.apoderado.nombres }}</strong><span class="muted"> · {{ v.parentesco }}</span></div>
+                      <div class="muted">{{ v.apoderado.telefono || 'Sin teléfono' }} · {{ v.apoderado.email || 'Sin correo' }}</div>
+                      @if (v.esResponsablePago) { <span class="badge badge-ok">Responsable de pago</span> }
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p class="muted">{{ alumno() ? nombreAlumno() + ' no tiene apoderado registrado.' : 'Indica quién es el apoderado de ' + nombreAlumno() + '.' }} Será el responsable de pago.</p>
+                <div class="modos" role="group" aria-label="Apoderado nuevo o ya registrado">
+                  <button type="button" class="modo" [class.on]="!apoderadoExistente()" (click)="modoApoderado(false)">Apoderado nuevo</button>
+                  <button type="button" class="modo" [class.on]="apoderadoExistente()" (click)="modoApoderado(true)">Ya está registrado</button>
+                </div>
+                <form [formGroup]="formApoderado" class="form-grid" novalidate>
+                  <div class="field"><label for="p-par">Parentesco *</label>
+                    <select id="p-par" formControlName="parentesco">@for (p of parentescos; track p) { <option [value]="p">{{ p }}</option> }</select></div>
+                  @if (apoderadoExistente()) {
+                    <div class="field full">
+                      <label for="p-bus">Buscar apoderado (nombre o documento)</label>
+                      <input id="p-bus" class="input" [formControl]="busquedaApoderado" (input)="buscarApoderado()" autocomplete="off" />
+                      @if (resultadosApoderado().length) {
+                        <ul class="resultados">@for (r of resultadosApoderado(); track r.id) { <li><button type="button" (click)="elegirApoderado(r)">{{ r.apellidos }}, {{ r.nombres }} · {{ r.numeroDocumento }}</button></li> }</ul>
+                      }
+                      @if (apoderadoElegido(); as ap) { <div class="aviso aviso-ok" style="margin-top: 8px">Elegido: <strong>{{ ap.apellidos }}, {{ ap.nombres }}</strong></div> }
+                    </div>
+                  } @else {
+                    <div class="field"><label for="p-tdoc">Tipo de documento</label>
+                      <select id="p-tdoc" formControlName="tipoDocumento"><option value="DNI">DNI</option><option value="CE">Carné de extranjería</option><option value="PASAPORTE">Pasaporte</option></select></div>
+                    <div class="field"><label for="p-doc">N.º de documento *</label><input id="p-doc" formControlName="numeroDocumento" maxlength="20" /></div>
+                    <div class="field"><label for="p-nom">Nombres *</label><input id="p-nom" formControlName="nombres" /></div>
+                    <div class="field"><label for="p-ape">Apellidos *</label><input id="p-ape" formControlName="apellidos" /></div>
+                    <div class="field"><label for="p-tel">Teléfono</label><input id="p-tel" formControlName="telefono" /></div>
+                    <div class="field"><label for="p-mail">Correo</label><input id="p-mail" type="email" formControlName="email" /></div>
+                  }
+                </form>
+              }
+            }
+
+            @case ('documentos') {
+              <h2>Documentos del alumno</h2>
+              <p class="muted">La matrícula solo se acepta con estos documentos subidos y verificados (compara con el original antes de verificar).</p>
+              @if (faltan().length || sinVerificar().length) {
+                <div class="generador">
+                  @if (faltan().length) {
+                    <button type="button" class="btn btn-primary" [disabled]="generando()" (click)="generarFaltantes()">
+                      {{ generando() ? 'Generando…' : 'Generar los ' + faltan().length + (faltan().length === 1 ? ' documento que falta' : ' documentos que faltan') }}
+                    </button>
+                  }
+                  @if (sinVerificar().length > 1) { <button type="button" class="btn" (click)="verificarTodos()">Verificar los {{ sinVerificar().length }} documentos</button> }
+                  <span class="muted">Genera las fichas con los datos registrados del alumno, sin subir archivos. No reemplazan al original.</span>
+                </div>
+              }
+              <ul class="docs">
+                @for (f of filasDocumentos(); track f.tipo) {
+                  <li [class]="'doc ' + f.estado">
+                    <div class="doc-info">
+                      <strong>{{ etiquetaDoc[f.tipo] }}</strong>
+                      @if (f.documento; as d) { <span class="muted">{{ d.nombreArchivo }} · subido {{ d.subidoEn | date: 'dd/MM/yyyy' }}</span> }
+                    </div>
+                    <span [class]="'badge ' + (f.estado === 'verificado' ? 'badge-ok' : f.estado === 'sin-verificar' ? 'badge-warn' : 'badge-danger')">
+                      {{ f.estado === 'verificado' ? 'Verificado' : f.estado === 'sin-verificar' ? 'Sin verificar' : 'Falta' }}
+                    </span>
+                    <div class="doc-acc">
+                      @if (f.estado === 'sin-verificar') { <button type="button" class="btn btn-sm btn-primary" (click)="verificar(f)">Verificar</button> }
+                      @if (f.estado !== 'verificado') {
+                        <label class="btn btn-sm" [class.deshabilitado]="subiendo() !== null">
+                          {{ subiendo() === f.tipo ? 'Subiendo…' : f.estado === 'falta' ? 'Subir' : 'Reemplazar' }}
+                          <input #archivo type="file" accept=".pdf,image/*" hidden [disabled]="subiendo() !== null" (change)="subir(f.tipo, archivo)" />
+                        </label>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+              <p class="muted nota">¿No tienes el documento a la mano? Puedes continuar luego desde la ficha del alumno (Expediente y documentos).</p>
+            }
+
+            @case ('seccion') {
+              <h2>Grado y sección</h2>
+              @if (cargandoAnio()) { <p class="muted">Cargando las secciones…</p> }
+              @else if (!opciones().length) { <div class="aviso aviso-warn" role="status">No hay secciones activas este año. Créalas en Configuración → Estructura académica.</div> }
+              @else {
+                <div class="field" style="max-width: 320px">
+                  <label for="m-grado">Grado</label>
+                  <select id="m-grado" [value]="gradoElegido()" (change)="elegirGrado($any($event.target).value)">
+                    <option value="">Elegir el grado…</option>
+                    @for (g of grados(); track g) { <option [value]="g">{{ g }}</option> }
+                  </select>
+                </div>
+                @if (gradoElegido()) {
+                  <div class="secciones" role="radiogroup" aria-label="Sección">
+                    @for (o of seccionesDelGrado(); track o.seccion.id) {
+                      <button type="button" role="radio" class="seccion" [class.on]="seccionId() === o.seccion.id" [disabled]="!o.disponible" [attr.aria-checked]="seccionId() === o.seccion.id" (click)="elegirSeccion(o.seccion.id)">
+                        <strong>Sección {{ o.seccion.nombre }}</strong>
+                        <span class="muted">{{ o.seccion.aulaNombre || 'Sin aula' }} · {{ o.seccion.turno === 'MANANA' ? 'Mañana' : o.seccion.turno === 'TARDE' ? 'Tarde' : o.seccion.turno }}</span>
+                        <span [class]="'badge ' + (o.disponible ? (o.vacantes <= 3 ? 'badge-warn' : 'badge-ok') : 'badge-danger')">{{ o.disponible ? o.vacantes + (o.vacantes === 1 ? ' vacante' : ' vacantes') : 'Llena' }}</span>
+                      </button>
+                    }
+                  </div>
+                }
+                <h3 style="margin: 18px 0 6px">Forma de pago de las pensiones</h3>
+                <p class="muted" style="margin: 0 0 8px">Se acuerda ahora y define cómo se generan las cuotas. Semestral tiene 5 % de descuento y anual 10 %.</p>
+                <div class="secciones" role="radiogroup" aria-label="Forma de pago">
+                  @for (p of planes(); track p.id) {
+                    <button type="button" role="radio" class="seccion" [class.on]="planElegido() === p.id" [attr.aria-checked]="planElegido() === p.id" (click)="elegirPlan(p.id)">
+                      <strong>{{ p.etiqueta }}</strong>
+                      <span class="muted">{{ p.ayuda }}</span>
+                      @if (p.resumen; as r) {
+                        <span>{{ r.cuotas }} {{ r.cuotas === 1 ? 'cuota' : 'cuotas' }} de S/ {{ r.cuota.toFixed(2) }}</span>
+                        <span class="muted">Total S/ {{ r.total.toFixed(2) }}</span>
+                      }
+                      @if (p.porcentaje > 0) { <span class="badge badge-ok">{{ p.porcentaje }} % de descuento</span> }
+                    </button>
+                  }
+                </div>
+                <form [formGroup]="formMatricula" class="form-grid" style="margin-top: 14px" novalidate>
+                  <div class="field"><label for="m-tipo">Tipo de matrícula</label>
+                    <select id="m-tipo" formControlName="tipo">@for (t of tiposMatricula; track t) { <option [value]="t">{{ t === 'NUEVA' ? 'Nueva' : t === 'RATIFICACION' ? 'Ratificación' : 'Reingreso' }}</option> }</select></div>
+                  <div class="field full"><label for="m-obs">Observaciones</label><input id="m-obs" formControlName="observaciones" maxlength="300" /></div>
+                </form>
+              }
+            }
+
+            @case ('confirmar') {
+              <h2>Revisa y confirma</h2>
+              <dl class="resumen">
+                <div><dt>Alumno</dt><dd>{{ nombreAlumno() }}@if (alumno()?.codigo) { <span class="muted"> · {{ alumno()!.codigo }}</span> }</dd></div>
+                <div><dt>Apoderado</dt><dd>@if (vinculos()[0]; as v) { {{ v.apoderado.apellidos }}, {{ v.apoderado.nombres }} ({{ v.parentesco }}) } @else { — }</dd></div>
+                <div><dt>Grado y sección</dt><dd>{{ seccionElegida()?.seccion?.gradoNombre }} · Sección {{ seccionElegida()?.seccion?.nombre }}</dd></div>
+                <div><dt>Año</dt><dd>{{ anio()?.nombre }}</dd></div>
+                <div><dt>Tipo</dt><dd>{{ formMatricula.controls.tipo.value }}</dd></div>
+                <div><dt>Forma de pago</dt><dd>{{ planActual().etiqueta }}
+                  @if (planActual().resumen; as r) { <span class="muted"> · {{ r.cuotas }} {{ r.cuotas === 1 ? 'cuota' : 'cuotas' }} de S/ {{ r.cuota.toFixed(2) }}@if (r.descuento > 0) { (ahorra S/ {{ r.descuento.toFixed(2) }}) }</span> }</dd></div>
+                <div><dt>Documentos</dt><dd><span class="badge badge-ok">Completos y verificados</span></dd></div>
+              </dl>
+
+              <!-- Descuento por hermano matriculado -->
+              <fieldset class="hermano-caja">
+                <legend>Descuento por hermano</legend>
+                <label class="check">
+                  <input type="checkbox" [checked]="conHermano()" (change)="alternarHermano($any($event.target).checked)" />
+                  <span>El alumno tiene un hermano matriculado en el colegio</span>
+                </label>
+                @if (conHermano()) {
+                  <div class="hermano-cuerpo">
+                    @if (!hermano()) {
+                      <div class="field">
+                        <label for="hm-doc">Documento (DNI) del hermano</label>
+                        <div class="hermano-busca">
+                          <input id="hm-doc" type="search" inputmode="numeric" autocomplete="off" maxlength="20" placeholder="Número de documento" [formControl]="documentoHermano" (keydown.enter)="$event.preventDefault(); buscarHermano()" />
+                          <button type="button" class="btn btn-primary" [disabled]="verificandoHermano() || documentoHermano.value.trim().length < 6" (click)="buscarHermano()">{{ verificandoHermano() ? 'Buscando…' : 'Buscar' }}</button>
+                        </div>
+                        <span class="muted">Se busca solo por el número de documento.</span>
+                      </div>
+                    } @else {
+                      @let h = hermano()!;
+                      @let ver = verificacionHermano();
+                      <div class="hermano-ficha">
+                        <div class="hermano-cab">
+                          <strong>{{ h.nombreCompleto }}</strong>
+                          <button type="button" class="btn btn-sm" (click)="elegirHermano(null)">Cambiar</button>
+                        </div>
+                        <dl class="resumen">
+                          <div><dt>Código</dt><dd>{{ h.codigo }}</dd></div>
+                          <div><dt>{{ h.tipoDocumento ?? 'Documento' }}</dt><dd>{{ h.numeroDocumento }}</dd></div>
+                          <div><dt>Fecha de nacimiento</dt><dd>{{ h.fechaNacimiento | date: 'dd/MM/yyyy' }}</dd></div>
+                          <div><dt>Matrícula {{ anio()?.nombre }}</dt><dd>
+                            @if (situacionHermano(); as sit) { <span class="badge" [class]="'badge ' + claseSituacion[sit]">{{ textoSituacion[sit] }}</span> }
+                            @if (ubicacionHermano()) { <span class="muted"> · {{ ubicacionHermano() }}</span> }
+                          </dd></div>
+                          <div><dt>Apoderado</dt><dd>@for (v of h.apoderados; track v.id; let ultimo = $last) { {{ v.apoderado.apellidos }}, {{ v.apoderado.nombres }}{{ ultimo ? '' : ' · ' }} } @empty { — }
+                            @if (ver?.mismoApoderado) { <span class="badge badge-ok">Mismo apoderado</span> }</dd></div>
+                        </dl>
+                        @if (ver && !ver.distinto) { <div class="aviso aviso-danger" role="alert">El hermano no puede ser el mismo alumno.</div> }
+                        @else if (ver && !ver.matriculado) { <div class="aviso aviso-warn" role="alert">Este alumno no consta matriculado este año, así que no corresponde el descuento por hermano.</div> }
+                      </div>
+                      @if (ver?.distinto && ver?.matriculado) {
+                        <div class="form-grid">
+                          <div class="field">
+                            <label for="hm-desc">Descuento que se otorga</label>
+                            <select id="hm-desc" (change)="descuentoId.set(+$any($event.target).value)">
+                              <option value="0" [selected]="!descuentoId()">Elegir…</option>
+                              @for (o of opcionesDescuento(); track o.id) { <option [value]="o.id" [selected]="o.id === descuentoId()">{{ o.nombre }} · {{ o.tipo === 'PORCENTAJE' ? o.valor + ' %' : 'S/ ' + o.valor }}</option> }
+                            </select>
+                            @if (!opcionesDescuento().length) { <span class="muted">El colegio no tiene descuentos para la matrícula: créalo en «Pagos → Descuentos».</span> }
+                          </div>
+                        </div>
+                        <label class="check">
+                          <input type="checkbox" [checked]="hermanoConfirmado()" (change)="hermanoConfirmado.set($any($event.target).checked)" />
+                          <span>Confirmo que verifiqué los datos del hermano ({{ h.nombreCompleto }}, {{ h.numeroDocumento }}) y que corresponde el descuento.</span>
+                        </label>
+                      }
+                    }
+                    @if (errorHermano()) { <div class="aviso aviso-danger" role="alert">{{ errorHermano() }}</div> }
+                    @if (faltaParaDescuento(); as f) { <p class="muted" role="status">{{ f }}</p> }
+                  </div>
+                }
+              </fieldset>
+              <p class="muted">Se crea la <strong>pre-matrícula</strong>. Queda confirmada cuando se paga la matrícula en Caja y tú la apruebas.</p>
+            }
+          }
+
+          @if (error()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ error() }}</div> }
+
+          <!-- Botones -->
+          <div class="botones">
+            <button type="button" class="btn" [disabled]="paso() === 'alumno' || ocupado()" (click)="atras()">← Atrás</button>
+            <span class="espacio"></span>
+            @if (!avance().puede && avance().motivo) { <span class="motivo" role="status">{{ avance().motivo }}</span> }
+            @if (paso() !== 'confirmar') {
+              <button type="button" class="btn btn-primary" [disabled]="!avance().puede || ocupado()" (click)="siguiente()">
+                {{ ocupado() ? 'Guardando…' : paso() === 'familia' && !alumno() ? 'Guardar alumno y continuar →' : 'Siguiente →' }}
+              </button>
+            } @else {
+              <button type="button" class="btn btn-primary" [disabled]="ocupado() || !seccionElegida()?.disponible || !hermanoListo()" (click)="matricular()">{{ ocupado() ? 'Matriculando…' : 'Matricular' }}</button>
+            }
+          </div>
+        }
+      </div>
+    </section>
+  }
+</div>

@@ -58,6 +58,28 @@ export function filtrarGrupos(grupos: readonly GrupoAsignar[], soloSuyos: boolea
   return grupos.map(g => ({ seccion: g.seccion, opciones: g.opciones.filter(o => o.apto || o.esMia) })).filter(g => g.opciones.length > 0);
 }
 
+const sinTildes = (t: string): string => (t ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+
+/**
+ * Filtra por texto (sin importar mayúsculas ni tildes): si coincide con el grado o la sección se ve toda la sección; si coincide con el nombre
+ * de un curso, solo esos cursos. Las secciones sin ninguna coincidencia se ocultan. Sin texto no filtra.
+ */
+export function filtrarPorTexto(grupos: readonly GrupoAsignar[], texto: string): GrupoAsignar[] {
+  const q = sinTildes(texto);
+  if (!q) return [...grupos];
+  return grupos
+    .map(g => {
+      const seccion = sinTildes(`${g.seccion.gradoNombre} ${g.seccion.nombre}`);
+      return seccion.includes(q) ? g : { seccion: g.seccion, opciones: g.opciones.filter(o => sinTildes(o.cursoNombre).includes(q)) };
+    })
+    .filter(g => g.opciones.length > 0);
+}
+
+/** Los cursos (sin repetir) que quedan en la lista del docente: los que ya tenía más los recién asignados. */
+export function cursosDelDocente(actuales: readonly number[] | null | undefined, asignados: readonly number[]): number[] {
+  return [...new Set([...(actuales ?? []), ...asignados])].sort((a, b) => a - b);
+}
+
 /** Las opciones libres que el docente puede dictar: lo que «elegir todos los sugeridos» marca. */
 export function sugeridasLibres(grupos: readonly GrupoAsignar[]): string[] {
   return grupos.flatMap(g => g.opciones.filter(o => o.apto && !o.ocupadoPor).map(o => o.clave));

@@ -23,12 +23,15 @@ export const DOCENTE = ['DOCENTE'];
 export const FAMILIA = ['APODERADO', 'ALUMNO'];
 export const TODOS = ['ADMIN', 'SECRETARIA', 'DOCENTE', 'APODERADO', 'ALUMNO', 'CAJERO'];
 
+/** Los ids de los espacios de la barra de caja (Inicio, Alumnos, Personal). */
+export const HUBS_CAJA = ['caja', 'caja-alumnos', 'caja-personal'];
+
 /**
- * El personal administrativo (solo ADMIN y/o SECRETARIA) navega con una barra horizontal superior: Inicio y los espacios de trabajo.
- * Quien además tiene otro rol (docente, caja…) mantiene el menú lateral, que sí reúne todos sus grupos.
+ * El personal administrativo (ADMIN, SECRETARIA) y la caja navegan con una barra horizontal superior: Inicio y los espacios de trabajo.
+ * Quien además tiene otro rol (docente…) mantiene el menú lateral, que sí reúne todos sus grupos.
  */
 export function usaBarraPersonal(roles: readonly string[]): boolean {
-  return roles.length > 0 && roles.every(r => PERSONAL.includes(r));
+  return roles.length > 0 && roles.every(r => PERSONAL.includes(r) || r === 'CAJERO');
 }
 
 /** Entrada del menú que abre un espacio de trabajo: va a su primera pestaña y se resalta con cualquiera de ellas. */
@@ -50,7 +53,9 @@ export const MENU: GrupoMenu[] = [
   {
     titulo: 'General',
     items: [
-      { etiqueta: 'Inicio', ruta: '/inicio', icono: 'M3 11l9-8 9 8M5 10v10h14V10', roles: PERSONAL },
+      { etiqueta: 'Inicio', ruta: '/inicio', icono: 'M3 11l9-8 9 8M5 10v10h14V10', roles: ['ADMIN'] },
+      // La secretaría tiene su propio inicio: lo que hace cada día (matricular, aprobar, documentos).
+      { etiqueta: 'Inicio', ruta: '/secretaria', icono: 'M3 11l9-8 9 8M5 10v10h14V10', roles: ['SECRETARIA'] },
       { etiqueta: 'Notificaciones', ruta: '/notificaciones', icono: 'M6 9a6 6 0 0112 0c0 6 2 7 2 7H4s2-1 2-7M10 20a2 2 0 004 0', roles: TODOS, conContador: true },
       { etiqueta: 'Mi trabajo', ruta: '/mi-trabajo', icono: 'M3 7h18v13H3zM8 7V4h8v3M3 13h18', roles: ['DOCENTE', 'CAJERO'] },
       { etiqueta: 'Calendario', ruta: '/calendario', icono: 'M4 5h16v15H4zM4 10h16M9 3v4M15 3v4', roles: TODOS },
@@ -86,11 +91,13 @@ export const MENU: GrupoMenu[] = [
   },
   {
     titulo: 'Ventanilla',
-    items: [{ etiqueta: 'Caja', ruta: '/caja', icono: 'M3 7h18v10H3zM3 11h18M7 15h2M12 15h5', roles: ['CAJERO'] }]
+    // Caja usa la barra horizontal como administración: Inicio, Alumnos y Personal.
+    items: [entradaHub('caja'), entradaHub('caja-alumnos'), entradaHub('caja-personal')]
   },
   {
     titulo: 'Gestión del colegio',
     items: [
+      entradaHub('alumnos'),
       entradaHub('matricula'),
       entradaHub('aulas'),
       entradaHub('cursos'),

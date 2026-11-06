@@ -41,7 +41,7 @@ export class FeriadosComponent implements OnInit {
   ngOnInit(): void {
     this.api.anios().subscribe(a => {
       this.anios.set(a);
-      this.anioId.setValue((a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0);
+      this.anioId.setValue(a.find(x => x.estado === 'ACTIVO')?.id ?? 0);
       this.cargar();
     });
   }

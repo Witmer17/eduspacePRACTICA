@@ -1,6 +1,7 @@
 import { Component, inject, input, output, signal } from '@angular/core';
 import { AlumnoResumen } from '../../core/models/alumno.model';
-import { TIPOS_MATRICULA, TipoMatricula } from '../../core/models/matricula.model';
+import { OpcionPlanPago, PlanPago, TIPOS_MATRICULA, TipoMatricula } from '../../core/models/matricula.model';
+import { PagoConfigService } from '../../core/services/pago-config.service';
 import { Seccion } from '../../core/models/planificacion.model';
 import { AlumnoService } from '../../core/services/alumno.service';
 import { MatriculaService } from '../../core/services/matricula.service';
@@ -43,6 +44,12 @@ const ETIQUETA: Record<TipoMatricula, string> = { NUEVA: 'Nueva', RATIFICACION: 
             @for (t of tipos; track t) { <option [value]="t" [selected]="t === tipo()">{{ etiqueta(t) }}</option> }
           </select>
         </div>
+        <div class="field full">
+          <label for="ms-plan">Forma de pago de las pensiones</label>
+          <select id="ms-plan" (change)="plan.set($any($event.target).value)">
+            @for (p of planes(); track p.id) { <option [value]="p.id" [selected]="p.id === plan()">{{ textoPlan(p) }}</option> }
+          </select>
+        </div>
       </div>
       @if (error()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ error() }}</div> }
       <ng-container footer>
@@ -62,6 +69,7 @@ export class MatricularEnSeccionComponent {
   private readonly alumnos = inject(AlumnoService);
   private readonly matriculas = inject(MatriculaService);
   private readonly avisos = inject(NotificationService);
+  private readonly pagoConfig = inject(PagoConfigService);
 
   readonly seccion = input.required<Seccion>();
   readonly guardado = output<void>();
@@ -76,6 +84,18 @@ export class MatricularEnSeccionComponent {
   protected readonly guardando = signal(false);
   protected readonly error = signal<string | null>(null);
   private espera?: ReturnType<typeof setTimeout>;
+
+  /** Forma de pago de las pensiones: mensual, bimestral, semestral (5 %) o anual (10 %); los porcentajes los manda el servidor. */
+  protected readonly plan = signal<PlanPago>('MENSUAL');
+  protected readonly planes = signal<OpcionPlanPago[]>([]);
+  protected readonly textoPlan = (p: OpcionPlanPago) => p.descuentoPorcentaje > 0 ? `${p.etiqueta} (${p.descuentoPorcentaje} % de descuento)` : p.etiqueta;
+
+  constructor() {
+    this.pagoConfig.planesPago().subscribe({
+      next: p => this.planes.set(p),
+      error: () => this.planes.set([{ id: 'MENSUAL', etiqueta: 'Mensual', descuentoPorcentaje: 0, cuotasEnDiezMeses: 10 }])
+    });
+  }
 
   protected buscar(valor: string): void {
     clearTimeout(this.espera);
@@ -107,7 +127,7 @@ export class MatricularEnSeccionComponent {
     if (!a) return;
     this.guardando.set(true);
     this.error.set(null);
-    this.matriculas.crear({ alumnoId: a.id, seccionId: this.seccion().id, tipo: this.tipo() }).subscribe({
+    this.matriculas.crear({ alumnoId: a.id, seccionId: this.seccion().id, tipo: this.tipo(), planPago: this.plan() }).subscribe({
       next: () => {
         this.guardando.set(false);
         this.avisos.success(`${a.nombreCompleto} quedó en pre-matrícula en esta sección.`);

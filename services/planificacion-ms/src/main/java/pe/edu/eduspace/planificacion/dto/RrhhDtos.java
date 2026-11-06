@@ -63,15 +63,21 @@ public final class RrhhDtos {
     public record PagarRequest(LocalDate fechaPago, @Size(max = 30) String medio, @Size(max = 100) String referencia) {
     }
 
+    /** El administrador rechaza un pago solicitado por caja: el motivo es obligatorio. */
+    public record RechazoRequest(@NotBlank @Size(max = 300) String motivo) {
+    }
+
     public record PagoResponse(
             Long id, Long personalId, String personalNombre, String areaNombre, Long contratoId, String periodo, String concepto,
-            String descripcion, BigDecimal monto, BigDecimal montoFirmado, String estado, LocalDate fechaPago, String medio, String referencia) {
+            String descripcion, BigDecimal monto, BigDecimal montoFirmado, String estado, LocalDate fechaPago, String medio, String referencia,
+            java.time.LocalDateTime solicitadoEn, String motivoRechazo) {
 
         public static PagoResponse de(PagoPersonal p) {
             var d = p.getPersonal();
             return new PagoResponse(p.getId(), d.getId(), d.nombreCompleto(), d.getArea() == null ? null : d.getArea().getNombre(),
                     p.getContrato() == null ? null : p.getContrato().getId(), p.getPeriodo(), p.getConcepto(), p.getDescripcion(),
-                    p.getMonto(), p.resta() ? p.getMonto().negate() : p.getMonto(), p.getEstado(), p.getFechaPago(), p.getMedio(), p.getReferencia());
+                    p.getMonto(), p.resta() ? p.getMonto().negate() : p.getMonto(), p.getEstado(), p.getFechaPago(), p.getMedio(), p.getReferencia(),
+                    p.getSolicitadoEn(), p.getMotivoRechazo());
         }
     }
 

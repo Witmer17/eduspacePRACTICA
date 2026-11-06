@@ -11,6 +11,7 @@ import {
   Tarifa,
   TarifaRequest
 } from '../models/pago.model';
+import { OpcionPlanPago } from '../models/matricula.model';
 
 const API = '/api/v1/pagos';
 
@@ -27,6 +28,11 @@ export class PagoConfigService {
   }
   actualizarConcepto(id: number, body: ConceptoRequest): Observable<Concepto> {
     return this.http.put<Concepto>(`${API}/conceptos/${id}`, body);
+  }
+
+  /** Las formas de pago de la pensión (mensual, bimestral, semestral, anual) con su descuento. */
+  planesPago(): Observable<OpcionPlanPago[]> {
+    return this.http.get<OpcionPlanPago[]>(`${API}/planes-pago`);
   }
 
   tarifas(anioId: number): Observable<Tarifa[]> {

@@ -8,6 +8,9 @@ import pe.edu.eduspace.alumnos.entity.EstadoAlumno;
 public interface AlumnoService {
     PageResponse<AlumnoResumenResponse> buscar(String q, EstadoAlumno estado, Pageable pageable);
 
+    /** Solo nombre, código y documento de los alumnos pedidos (no el expediente): lo usan quienes cobran o buscan. */
+    java.util.List<AlumnoResumenResponse> resumenes(java.util.List<Long> ids);
+
     AlumnoResponse obtener(Long id);
 
     AlumnoResponse crear(AlumnoCreateRequest request);

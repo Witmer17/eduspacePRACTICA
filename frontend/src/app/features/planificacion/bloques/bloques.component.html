@@ -14,6 +14,34 @@
     </select>
   </div>
 
+  @if (puedeEditar()) {
+    <section class="card" aria-labelledby="t-asis" style="margin-bottom: 16px">
+      <div class="card-body">
+        <h2 id="t-asis" class="sec-titulo">Asistente: crear las franjas de un turno</h2>
+        <p class="muted" style="margin: 0 0 10px">Indica desde qué hora empieza, cuánto dura cada clase y hasta qué hora llegan. Se crean todas de una vez; luego puedes editarlas una por una.</p>
+        <form [formGroup]="gen" novalidate>
+          <div class="form-grid">
+            <div class="field"><label for="g-turno">Turno</label>
+              <select id="g-turno" formControlName="turno"><option value="MANANA">Mañana</option><option value="TARDE">Tarde</option></select></div>
+            <div class="field"><label for="g-ini">Empieza a las</label><input id="g-ini" type="time" formControlName="inicio" /></div>
+            <div class="field"><label for="g-dur">Duración de cada clase (min)</label><input id="g-dur" type="number" min="10" max="120" formControlName="duracion" /></div>
+            <div class="field"><label for="g-hasta">Hasta las (hora límite)</label><input id="g-hasta" type="time" formControlName="hasta" /></div>
+            <div class="field"><label for="g-rc">Receso cada (clases, 0 = sin receso)</label><input id="g-rc" type="number" min="0" max="10" formControlName="recesoCada" /></div>
+            <div class="field"><label for="g-rm">Duración del receso (min)</label><input id="g-rm" type="number" min="5" max="60" formControlName="recesoMin" /></div>
+          </div>
+        </form>
+        <p class="muted" style="margin: 10px 0">
+          Vista previa: <strong>{{ propuesta().length }}</strong> franja(s), de {{ gen.getRawValue().inicio }} a {{ propuesta().at(-1)?.horaFin?.slice(0, 5) ?? '—' }}.
+          @if (turnoConBloques()) { <span class="badge badge-warn">Este turno ya tiene bloques</span> }
+        </p>
+        @if (errorGen()) { <div class="aviso aviso-danger" role="alert">{{ errorGen() }}</div> }
+        <div class="toolbar" style="margin-top: 10px">
+          <button type="button" class="btn btn-primary" [disabled]="generando() || propuesta().length === 0 || turnoConBloques()" (click)="generarFranjas()">{{ generando() ? 'Creando…' : 'Crear franjas' }}</button>
+        </div>
+      </div>
+    </section>
+  }
+
   <div class="card">
     <div class="table-wrap">
       <table class="table">

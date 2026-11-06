@@ -11,8 +11,8 @@ import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 
 /**
- * Aprobación administrativa de matrículas. Una matrícula pagada (en línea o en caja) queda POR_APROBAR; solo la administración la
- * aprueba. Al aprobar: pasa a MATRICULADO, se generan las pensiones y, si fue en línea, el apoderado recibe por correo su usuario,
+ * Aprobación administrativa de matrículas. Una matrícula pagada (en línea o en caja) queda POR_APROBAR; la confirman la
+ * administración y la secretaría. Al aprobar: pasa a MATRICULADO, se generan las pensiones y, si fue en línea, el apoderado recibe por correo su usuario,
  * su clave inicial, la constancia y el horario. Al rechazar: se anula, se libera el cupo y se avisa por correo con el motivo.
  */
 @Component({

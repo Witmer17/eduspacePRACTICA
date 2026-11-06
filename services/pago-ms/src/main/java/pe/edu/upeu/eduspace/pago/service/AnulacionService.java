@@ -28,6 +28,7 @@ public class AnulacionService {
     private final ComprobanteRepository comprobanteRepository;
     private final OutboxEventoRepository outboxEventoRepository;
     private final ObjectMapper objectMapper;
+    private final CreditoService creditoService;
 
     @Transactional
     public void anularPago(Long pagoId, AnularPagoRequest req, Long usuarioId) {
@@ -53,6 +54,11 @@ public class AnulacionService {
             }
             cuota.setActualizadaEn(LocalDateTime.now());
             cuotaRepository.save(cuota);
+        }
+
+        // Un cobro hecho con el crédito del alumno: lo cobrado vuelve a su crédito
+        if ("CREDITO".equals(pago.getMedio())) {
+            creditoService.devolverPorAnulacion(pago, usuarioId);
         }
 
         // Marcar pago y comprobante anulados

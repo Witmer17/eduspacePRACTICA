@@ -7,7 +7,7 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Aplica a</th><th>Estado</th><th></th></tr>
+          <tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Aplica a</th><th>Código en la matrícula en línea</th><th>Estado</th><th></th></tr>
         </thead>
         <tbody>
           @for (d of descuentos(); track d.id) {
@@ -16,11 +16,12 @@
               <td>{{ d.tipo === 'PORCENTAJE' ? 'Porcentaje' : 'Monto fijo' }}</td>
               <td>{{ valor(d) }}</td>
               <td><span class="badge">{{ d.aplicaA }}</span></td>
+              <td>@if (d.codigo) { <code class="codigo-desc">{{ d.codigo }}</code> } @else { <span class="muted">Solo lo asigna el administrador</span> }</td>
               <td><span [class]="'badge ' + (d.activo ? 'badge-ok' : 'badge-gray')">{{ d.activo ? 'Activo' : 'Inactivo' }}</span></td>
               <td class="acciones"><button type="button" class="btn btn-sm" (click)="editar(d)">Editar</button></td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="vacio">{{ cargando() ? 'Cargando…' : 'Aún no hay descuentos.' }}</td></tr>
+            <tr><td colspan="7" class="vacio">{{ cargando() ? 'Cargando…' : 'Aún no hay descuentos.' }}</td></tr>
           }
         </tbody>
       </table>
@@ -57,6 +58,12 @@
         </div>
         <div class="field">
           <label class="check" style="margin-top: 22px"><input type="checkbox" formControlName="activo" /> Descuento activo</label>
+        </div>
+        <div class="field full">
+          <label for="de-codigo">Código para la matrícula en línea (opcional)</label>
+          <input id="de-codigo" formControlName="codigo" placeholder="HERMANOS10" autocomplete="off" style="text-transform: uppercase" />
+          @if (form.controls.codigo.invalid) { <span class="error">De 3 a 40 letras, números, guion o guion bajo, sin espacios.</span> }
+          @else { <span class="muted">Si escribes un código, las familias pueden escribirlo en la página pública al matricularse y el descuento se aplica solo. Sin código, solo lo asigna el administrador en Cuentas por alumno.</span> }
         </div>
       </div>
       @if (errorForm()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorForm() }}</div> }

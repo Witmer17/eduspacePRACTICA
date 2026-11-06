@@ -206,6 +206,41 @@ class ConfiguracionColegioIntegrationTest extends PostgresIntegrationTestBase {
     }
 
     @Test
+    @Order(8)
+    void pabellones_losGradosQueLoUsanSeEligenMarcandolos_ySoloElAdministradorLosCambia() throws Exception {
+        String body = enviar("POST", "/api/v1/planificacion/pabellones", "{\"nombre\":\"ConGrados\",\"cantidadAulas\":0}", "ADMIN")
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.gradoIds").isEmpty()).andReturn().getResponse().getContentAsString();
+        long pabellon = ((Number) JsonPath.read(body, "$.id")).longValue();
+        java.util.List<Long> grados = jdbc.queryForList("select id from grados order by id limit 3", Long.class);
+        try {
+            // se eligen tres grados: vuelven ordenados y se guardan
+            enviar("PUT", "/api/v1/planificacion/pabellones/" + pabellon + "/grados",
+                    "{\"gradoIds\":[" + grados.get(2) + "," + grados.get(0) + "," + grados.get(1) + "]}", "ADMIN")
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.gradoIds.length()").value(3))
+                    .andExpect(jsonPath("$.gradoIds[0]").value(grados.get(0).intValue()));
+            org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject("select count(*) from pabellon_grados where pabellon_id = ?", Integer.class, pabellon)).isEqualTo(3);
+            mvc.perform(get("/api/v1/planificacion/pabellones").with(usuario("SECRETARIA")))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.nombre == 'ConGrados')].gradoIds.length()", hasItem(3)));
+
+            // la lista reemplaza a la anterior (no se acumula) y repetidos cuentan una vez
+            enviar("PUT", "/api/v1/planificacion/pabellones/" + pabellon + "/grados", "{\"gradoIds\":[" + grados.get(1) + "," + grados.get(1) + "]}", "ADMIN")
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.gradoIds.length()").value(1));
+            // un grado que no existe, sin lista, y sin ser administrador: se rechazan
+            enviar("PUT", "/api/v1/planificacion/pabellones/" + pabellon + "/grados", "{\"gradoIds\":[999999]}", "ADMIN").andExpect(status().isConflict());
+            enviar("PUT", "/api/v1/planificacion/pabellones/" + pabellon + "/grados", "{}", "ADMIN").andExpect(status().isBadRequest());
+            enviar("PUT", "/api/v1/planificacion/pabellones/" + pabellon + "/grados", "{\"gradoIds\":[]}", "SECRETARIA").andExpect(status().isForbidden());
+            enviar("PUT", "/api/v1/planificacion/pabellones/999999/grados", "{\"gradoIds\":[]}", "ADMIN").andExpect(status().isNotFound());
+            // quitar todos
+            enviar("PUT", "/api/v1/planificacion/pabellones/" + pabellon + "/grados", "{\"gradoIds\":[]}", "ADMIN")
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.gradoIds").isEmpty());
+        } finally {
+            mvc.perform(delete("/api/v1/planificacion/pabellones/" + pabellon).with(usuario("ADMIN")));
+        }
+        // eliminar el pabellón se lleva sus filas de grados (llave con ON DELETE CASCADE)
+        org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject("select count(*) from pabellon_grados where pabellon_id = ?", Integer.class, pabellon)).isZero();
+    }
+
+    @Test
     @Order(9)
     void pabellones_lasAulasDeclaradasSePuedenCrearDeVerdad_sinRepetirCodigosNiPasarse() throws Exception {
         String body = enviar("POST", "/api/v1/planificacion/pabellones", "{\"nombre\":\"Gen\",\"cantidadAulas\":3}", "ADMIN")

@@ -7,6 +7,12 @@ import pe.edu.eduspace.alumnos.dto.*;
 public interface InternalConsultaService {
     AlumnoBasicoResponse basico(Long alumnoId);
 
+    /** Los apoderados de un alumno, con su documento (para comprobar que coincidan con los de un hermano). */
+    List<pe.edu.eduspace.alumnos.dto.ApoderadoResponse> apoderadosDe(Long alumnoId);
+
+    /** El alumno con ese número de documento (404 si no hay). */
+    AlumnoBasicoResponse porDocumento(String numeroDocumento);
+
     AlumnoUsuarioResponse alumnoDeUsuario(Long usuarioId);
 
     List<HijoResponse> hijosDeUsuario(Long usuarioId);

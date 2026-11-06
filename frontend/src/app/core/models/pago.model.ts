@@ -48,6 +48,8 @@ export interface Descuento {
   valor: number;
   aplicaA: AplicaA;
   activo: boolean;
+  /** Código que la familia escribe en la matrícula en línea para canjearlo; vacío = solo lo asigna el administrador. */
+  codigo?: string | null;
 }
 export type DescuentoRequest = Omit<Descuento, 'id'>;
 

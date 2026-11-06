@@ -96,7 +96,7 @@ public class MatriculaController {
     }
 
     @PatchMapping("/{id}/aprobar")
-    @Operation(summary = "Aprobar una matrícula pagada (solo ADMIN): pasa a MATRICULADO y, si fue en línea, envía el acceso por correo")
+    @Operation(summary = "Aprobar una matrícula pagada (ADMIN o SECRETARIA): pasa a MATRICULADO y, si fue en línea, envía el acceso por correo")
     public MatriculaResponse aprobar(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         MatriculaResponse r = service.aprobar(id, identidad.usuarioId(jwt));
         enLinea.aprobada(id);
@@ -104,7 +104,7 @@ public class MatriculaController {
     }
 
     @PatchMapping("/{id}/rechazar")
-    @Operation(summary = "Rechazar una matrícula pagada (solo ADMIN): se anula, libera el cupo y avisa por correo")
+    @Operation(summary = "Rechazar una matrícula pagada (ADMIN o SECRETARIA): se anula, libera el cupo y avisa por correo")
     public MatriculaResponse rechazar(@PathVariable Long id, @Valid @RequestBody AnulacionRequest req, @AuthenticationPrincipal Jwt jwt) {
         MatriculaResponse r = service.rechazar(id, req.motivo(), identidad.usuarioId(jwt));
         enLinea.rechazada(id, req.motivo());
@@ -112,7 +112,7 @@ public class MatriculaController {
     }
 
     @PostMapping("/{id}/reenviar-acceso")
-    @Operation(summary = "Reenviar el correo de acceso de una matrícula en línea ya aprobada (solo ADMIN)")
+    @Operation(summary = "Reenviar el correo de acceso de una matrícula en línea ya aprobada (ADMIN o SECRETARIA)")
     public void reenviarAcceso(@PathVariable Long id) {
         enLinea.reenviarAcceso(id);
     }

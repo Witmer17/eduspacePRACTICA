@@ -46,6 +46,16 @@ public class AlumnoController {
         return service.mios(UsuarioActual.id(), UsuarioActual.tieneAlgunRol("APODERADO"));
     }
 
+    /** Nombres de varios alumnos a la vez (máximo 200 ids). Solo datos de identificación. */
+    @GetMapping("/resumen")
+    @PreAuthorize("hasAnyRole('ADMIN','SECRETARIA','DOCENTE','CAJERO')")
+    public List<AlumnoResumenResponse> resumen(@RequestParam List<Long> ids) {
+        if (ids.size() > 200) {
+            throw new IllegalArgumentException("Pida como máximo 200 alumnos por vez");
+        }
+        return service.resumenes(ids);
+    }
+
     @GetMapping("/{id}")
     public AlumnoResponse obtener(@PathVariable Long id) {
         acceso.verificarLecturaAlumno(id);

@@ -31,6 +31,16 @@ public class InternalController {
         return internal.basico(id);
     }
 
+    @GetMapping("/alumnos/documento/{numero}")
+    public AlumnoBasicoResponse porDocumento(@PathVariable String numero) {
+        return internal.porDocumento(numero);
+    }
+
+    @GetMapping("/alumnos/{id}/apoderados")
+    public List<pe.edu.eduspace.alumnos.dto.ApoderadoResponse> apoderados(@PathVariable Long id) {
+        return internal.apoderadosDe(id);
+    }
+
     @GetMapping("/alumnos/{id}/contactos")
     public ContactosNotificacionResponse contactos(@PathVariable Long id) {
         return contactosService.contactos(id);

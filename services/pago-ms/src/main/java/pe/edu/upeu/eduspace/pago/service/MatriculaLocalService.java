@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.upeu.eduspace.pago.entity.MatriculaLocal;
 import pe.edu.upeu.eduspace.pago.event.MatriculaEvent;
 import pe.edu.upeu.eduspace.pago.repository.MatriculaLocalRepository;
+import pe.edu.upeu.eduspace.pago.util.PlanPago;
 
 import java.time.LocalDateTime;
 
@@ -31,6 +32,9 @@ public class MatriculaLocalService {
         ml.setGradoId(event.getGradoId());
         ml.setSeccionId(event.getSeccionId());
         ml.setEstado(event.getEstado());
+        if (event.getPlanPago() != null && !event.getPlanPago().isBlank()) {
+            ml.setPlanPago(PlanPago.de(event.getPlanPago()).name());
+        }
 
         if (event.getResponsablePagoUsuarioId() != null) {
             ml.setResponsableUsuarioId(event.getResponsablePagoUsuarioId());

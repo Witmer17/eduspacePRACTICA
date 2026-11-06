@@ -38,6 +38,21 @@ public interface CuotaRepository extends JpaRepository<Cuota, Long> {
 
     List<Cuota> findByEstado(String estado);
 
+    /**
+     * Las pensiones de un alumno que ya toca cobrar (vencen hoy o ya vencieron) y aún deben algo, de la más antigua a la más reciente.
+     * Es lo que el crédito del alumno paga solo.
+     */
+    @Query("""
+        SELECT c FROM Cuota c
+        WHERE c.alumnoId = :alumnoId
+          AND c.concepto.tipo = 'PENSION'
+          AND c.estado IN ('PENDIENTE', 'PARCIAL', 'VENCIDA')
+          AND c.fechaVencimiento <= :hoy
+          AND c.saldo > 0
+        ORDER BY c.fechaVencimiento ASC, c.numeroCuota ASC, c.id ASC
+    """)
+    List<Cuota> pensionesExigibles(@Param("alumnoId") Long alumnoId, @Param("hoy") LocalDate hoy);
+
     @Query("""
         SELECT c FROM Cuota c
         WHERE c.estado IN ('PENDIENTE', 'PARCIAL')

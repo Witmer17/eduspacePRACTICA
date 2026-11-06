@@ -11,9 +11,9 @@ import { NotificationService } from '../../core/services/notification.service';
 import { PlanificacionService } from '../../core/services/planificacion.service';
 import { RrhhService } from '../../core/services/rrhh.service';
 import { mensajeError } from '../../core/utils/errores';
-import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
-import { ResumenPersona, hoyLocal, rangoDelMes, resumenPorPersona } from './asistencia-personal';
+import { ResumenPersona, rangoDelMes, resumenPorPersona } from './asistencia-personal';
+import { PagosPorAprobarComponent } from './pagos-por-aprobar.component';
 import { PersonalRrhhComponent } from './personal-rrhh.component';
 import {
   CLASE_ESTADO_PAGO, DescuentoAsistencia, ETIQUETA_ESTADO_PAGO, EstadoPagoMes, TARDANZAS_POR_DIA, avisoPeriodo, claseEstadoContrato, contratoDelPeriodo,
@@ -51,10 +51,12 @@ const PREFIJO_INASISTENCIAS = 'Descuento por inasistencias';
  */
 @Component({
   selector: 'app-pago-personal',
-  imports: [ReactiveFormsModule, PageHeaderComponent, ModalComponent, PersonalRrhhComponent],
+  imports: [ReactiveFormsModule, PageHeaderComponent, PersonalRrhhComponent, PagosPorAprobarComponent],
   template: `
     <div class="page">
-      <app-page-header titulo="Pago al personal" subtitulo="Cada persona con su contrato, su asistencia del mes y lo que se le debe pagar. Genera la planilla del mes y paga desde la tarjeta." />
+      <app-page-header titulo="Pago al personal" subtitulo="Cada persona con su contrato, su asistencia del mes y lo que se le debe pagar. Genera la planilla del mes; caja registra los pagos y tú los apruebas." />
+
+      <app-pagos-por-aprobar (cambio)="cargarMes()" />
 
       <div class="barra">
         <div class="field" style="margin: 0">
@@ -82,6 +84,7 @@ const PREFIJO_INASISTENCIAS = 'Descuento por inasistencias';
         <select class="input area-sel" [formControl]="estadoFiltro" aria-label="Filtrar por estado del pago">
           <option value="todos">Todos los estados</option>
           <option value="pendiente">Pendientes de pago</option>
+          <option value="por-aprobar">Por aprobar</option>
           <option value="pagado">Pagados</option>
           <option value="sin-generar">Sin generar</option>
           <option value="sin-contrato">Sin contrato</option>
@@ -171,7 +174,8 @@ const PREFIJO_INASISTENCIAS = 'Descuento por inasistencias';
                     <li>
                       <span class="concepto">{{ concepto(l) }}@if (l.descripcion) { <small>{{ l.descripcion }}</small> }</span>
                       <span class="monto" [class.neg]="l.montoFirmado < 0">{{ dinero(l.montoFirmado) }}</span>
-                      <span [class]="'mini ' + (l.estado === 'PAGADO' ? 'ok' : 'warn')" [title]="l.fechaPago ? 'Pagado el ' + l.fechaPago : 'Pendiente'">{{ l.estado === 'PAGADO' ? 'Pagado' : 'Pend.' }}</span>
+                      <span [class]="'mini ' + (l.estado === 'PAGADO' ? 'ok' : l.estado === 'POR_APROBAR' ? 'viol' : 'warn')"
+                        [title]="l.estado === 'PAGADO' ? 'Pagado el ' + l.fechaPago : l.estado === 'POR_APROBAR' ? 'Caja lo registró: falta tu aprobación' : (l.motivoRechazo ? 'Rechazado: ' + l.motivoRechazo : 'Pendiente: lo paga caja')">{{ l.estado === 'PAGADO' ? 'Pagado' : l.estado === 'POR_APROBAR' ? 'Por aprobar' : 'Pend.' }}</span>
                     </li>
                   }
                 </ul>
@@ -188,8 +192,10 @@ const PREFIJO_INASISTENCIAS = 'Descuento por inasistencias';
             </section>
 
             <footer class="pie">
-              @if (t.pendiente > 0) {
-                <button type="button" class="btn btn-primary" (click)="abrirPago(t)" [attr.aria-label]="'Pagar a ' + t.p.nombres + ' ' + t.p.apellidos">Pagar {{ dinero(t.pendiente) }}</button>
+              @if (t.estado === 'pendiente') {
+                <p class="espera">Falta pagar {{ dinero(t.pendiente) }}: lo registra caja y luego lo apruebas arriba.</p>
+              } @else if (t.estado === 'por-aprobar') {
+                <p class="espera viol">Caja ya registró el pago de {{ dinero(t.pendiente) }}: falta tu aprobación (arriba en «Pagos por aprobar»).</p>
               }
               @if (t.porDescontar > 0 && t.calculo) {
                 <button type="button" class="btn btn-sm" (click)="descontarInasistencias(t)" [title]="resumenDias(t.calculo)">Descontar inasistencias {{ dinero(t.porDescontar) }}</button>
@@ -206,52 +212,6 @@ const PREFIJO_INASISTENCIAS = 'Descuento por inasistencias';
         }
       </div>
     </div>
-
-    <!-- Pagar: todas las líneas pendientes del mes de esa persona de una vez -->
-    @if (pagando(); as t) {
-      <app-modal [titulo]="'Pagar a ' + t.p.nombres + ' ' + t.p.apellidos" [ancho]="520" (cerrar)="pagando.set(null)">
-        <p style="margin: 0 0 8px">Se marcarán como pagadas estas líneas de <strong>{{ nombreMes() }}</strong>:</p>
-        <ul class="lineas">
-          @for (l of pendientesDe(t); track l.id) {
-            <li><span class="concepto">{{ concepto(l) }}@if (l.descripcion) { <small>{{ l.descripcion }}</small> }</span><span class="monto" [class.neg]="l.montoFirmado < 0">{{ dinero(l.montoFirmado) }}</span></li>
-          }
-        </ul>
-        <div class="neto"><span>Total a pagar</span><strong>{{ dinero(t.pendiente) }}</strong></div>
-
-        <!-- A dónde depositar -->
-        @if (t.cuenta; as cu) {
-          <div class="destino">
-            <h4>Depositar a</h4>
-            <dl>
-              <dt>{{ etiquetaBanco(cu.banco) }} · {{ etiquetaTipoCuenta(cu.tipo) }}</dt>
-              <dd><span class="num">{{ cu.numero }}</span> <button type="button" class="copiar" (click)="copiar(cu.numero)" aria-label="Copiar el número de cuenta">Copiar</button></dd>
-              @if (cu.cci) { <dt>CCI</dt><dd><span class="num">{{ cu.cci }}</span> <button type="button" class="copiar" (click)="copiar(cu.cci)" aria-label="Copiar el CCI">Copiar</button></dd> }
-              <dt>Titular</dt><dd>{{ cu.titular }}</dd>
-            </dl>
-          </div>
-        } @else {
-          <div class="aviso aviso-warn" style="margin-top: 10px" role="status">
-            {{ t.p.nombres }} no tiene cuenta de depósito. Puedes pagarle en efectivo o cheque, o
-            <button type="button" class="enlace-aviso" (click)="pagando.set(null); abrirDetalle(t.p, 'cuenta')">agregar su cuenta</button>.
-          </div>
-        }
-        <div class="form-grid" style="margin-top: 12px">
-          <div class="field"><label for="pg-fecha">Fecha del pago</label><input id="pg-fecha" type="date" [formControl]="fechaPago" /></div>
-          <div class="field">
-            <label for="pg-medio">Medio</label>
-            <select id="pg-medio" [formControl]="medioPago">
-              <option value="TRANSFERENCIA">Transferencia</option><option value="EFECTIVO">Efectivo</option>
-              <option value="CHEQUE">Cheque</option><option value="YAPE_PLIN">Yape / Plin</option>
-            </select>
-          </div>
-          <div class="field full"><label for="pg-ref">N.º de operación o referencia</label><input id="pg-ref" [formControl]="referenciaPago" maxlength="100" /></div>
-        </div>
-        <ng-container footer>
-          <button type="button" class="btn" (click)="pagando.set(null)">Cancelar</button>
-          <button type="button" class="btn btn-primary" [disabled]="guardando()" (click)="confirmarPago(t)">{{ guardando() ? 'Registrando…' : 'Confirmar pago' }}</button>
-        </ng-container>
-      </app-modal>
-    }
 
     @if (detalle(); as d) {
       <app-personal-rrhh [persona]="d.p" [pestanaInicial]="d.pestana" (cerrar)="cerrarDetalle()" />
@@ -324,6 +284,9 @@ const PREFIJO_INASISTENCIAS = 'Descuento por inasistencias';
     .mini { flex: none; padding: 1px 8px; border-radius: 999px; font-size: .62rem; font-weight: 800; text-transform: uppercase; }
     .mini.ok { color: var(--ok); background: var(--ok-soft); }
     .mini.warn { color: var(--warn); background: var(--warn-soft); }
+    .mini.viol { color: var(--violet); background: var(--violet-soft); }
+    .espera { margin: 0; flex: 1 1 100%; font-size: .85rem; color: var(--warn); font-weight: 600; }
+    .espera.viol { color: var(--violet); }
     .neto { display: flex; justify-content: space-between; align-items: baseline; padding-top: 8px; margin-top: 4px; border-top: 1px solid var(--line-2); }
     .neto strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
     .resumen-pago { display: flex; justify-content: space-between; font-size: .82rem; color: var(--ink-2); }
@@ -375,11 +338,7 @@ export class PagoPersonalComponent implements OnInit {
   private readonly estado = signal<FiltroEstado>('todos');
   private readonly texto = signal('');
 
-  protected readonly pagando = signal<Tarjeta | null>(null);
   protected readonly detalle = signal<{ p: Docente; pestana: 'contratos' | 'pagos' | 'cuenta' } | null>(null);
-  protected readonly fechaPago = this.fb.nonNullable.control(hoyLocal());
-  protected readonly medioPago = this.fb.nonNullable.control('TRANSFERENCIA');
-  protected readonly referenciaPago = this.fb.nonNullable.control('');
 
   /** Una tarjeta por persona activa, con todo calculado para el mes elegido. */
   private readonly todas = computed<Tarjeta[]>(() => {
@@ -445,16 +404,12 @@ export class PagoPersonalComponent implements OnInit {
     });
   }
 
-  protected copiar(texto: string): void {
-    navigator.clipboard?.writeText(texto).then(() => this.avisos.success('Copiado.'), () => this.avisos.warning('No se pudo copiar: selecciónalo y cópialo a mano.'));
-  }
-
   protected valido(): boolean {
     return periodoValido(this.periodo.value);
   }
 
   /** Los pagos y la asistencia del mes elegido. */
-  private cargarMes(): void {
+  protected cargarMes(): void {
     const mes = this.periodo.value;
     const { desde, hasta } = rangoDelMes(mes);
     this.cargando.set(true);
@@ -480,7 +435,6 @@ export class PagoPersonalComponent implements OnInit {
   protected claseBarra(p: number): string { return p >= 95 ? 'ok' : p >= 85 ? 'warn' : 'danger'; }
   /** El aviso de vencimiento solo tiene sentido para el mes en curso. */
   protected aviso(c: Contrato): string { return this.periodoSig() === this.mesActual ? avisoPeriodo(c) : ''; }
-  protected pendientesDe(t: Tarjeta): PagoPersonal[] { return t.pagos.filter(l => l.estado === 'PENDIENTE'); }
 
   protected generar(): void {
     this.generando.set(true);
@@ -491,30 +445,6 @@ export class PagoPersonalComponent implements OnInit {
         this.cargarMes();
       },
       error: e => { this.generando.set(false); this.avisos.error(mensajeError(e)); }
-    });
-  }
-
-  // ---------- Pagar ----------
-  protected abrirPago(t: Tarjeta): void {
-    this.fechaPago.setValue(hoyLocal());
-    this.medioPago.setValue('TRANSFERENCIA');
-    this.referenciaPago.setValue('');
-    this.pagando.set(t);
-  }
-
-  protected confirmarPago(t: Tarjeta): void {
-    const lineas = this.pendientesDe(t);
-    if (!lineas.length) return;
-    this.guardando.set(true);
-    const datos = { fechaPago: this.fechaPago.value || undefined, medio: this.medioPago.value, referencia: this.referenciaPago.value.trim() || undefined };
-    forkJoin(lineas.map(l => this.rrhh.pagar(l.id, datos))).subscribe({
-      next: () => {
-        this.guardando.set(false);
-        this.pagando.set(null);
-        this.avisos.success(`Pago registrado a ${t.p.nombres} ${t.p.apellidos}.`);
-        this.cargarMes();
-      },
-      error: e => { this.guardando.set(false); this.avisos.error(mensajeError(e)); this.cargarMes(); }
     });
   }
 

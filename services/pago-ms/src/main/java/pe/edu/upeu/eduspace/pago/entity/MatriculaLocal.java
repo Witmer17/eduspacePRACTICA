@@ -39,6 +39,11 @@ public class MatriculaLocal {
     @Column(name = "estado", nullable = false, length = 15)
     private String estado;
 
+    /** Forma de pago de las pensiones acordada al matricular (MENSUAL, BIMESTRAL, SEMESTRAL o ANUAL). */
+    @Column(name = "plan_pago", nullable = false, length = 12)
+    @Builder.Default
+    private String planPago = "MENSUAL";
+
     @Column(name = "responsable_usuario_id")
     private Long responsableUsuarioId;
 

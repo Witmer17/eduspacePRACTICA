@@ -12,6 +12,9 @@ public interface DocenteService {
     /** Personal de un área; con {@code todas} (y sin área), el de todas las áreas. */
     PageResponse<DocenteResponse> buscar(String q, Long areaId, boolean todas, Pageable pageable);
 
+    /** Como {@link #buscar(String, Long, boolean, Pageable)}, pero solo las personas con ese estado (null = todas). */
+    PageResponse<DocenteResponse> buscar(String q, Long areaId, boolean todas, pe.edu.eduspace.planificacion.entity.EstadoDocente estado, Pageable pageable);
+
     DocenteResponse obtener(Long id);
 
     DocenteResponse crear(DocenteRequest request);

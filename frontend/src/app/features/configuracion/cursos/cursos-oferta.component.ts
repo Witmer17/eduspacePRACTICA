@@ -1,9 +1,9 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { forkJoin, of } from 'rxjs';
+import { Observable, forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
-import { Anio, Asignacion, Curso, Docente, DocenteRequest, Grado, MallaGrado, Nivel } from '../../../core/models/planificacion.model';
-import { Cobertura, EstadoCobertura, cambiosDocentesDeCurso, coberturaCursos, textoCobertura } from '../../personal/cursos-docente';
+import { Anio, Asignacion, Curso, Docente, DocenteRequest, Grado, MallaGrado, Nivel, Seccion } from '../../../core/models/planificacion.model';
+import { Cobertura, EstadoCobertura, cambiosDocentesDeCurso, coberturaCursos, seccionesPorCurso, textoCobertura } from '../../personal/cursos-docente';
 import { AuthService } from '../../../core/services/auth.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { PlanificacionService } from '../../../core/services/planificacion.service';
@@ -55,7 +55,8 @@ interface Edicion {
         @if (cargando()) { <span class="muted">Cargando…</span> }
         <span class="leyenda">
           <span class="cob asignado">Con docente · {{ conteo().asignado }}</span>
-          <span class="cob apto">Sin asignar · {{ conteo().apto }}</span>
+          @if (conteo().parcial) { <span class="cob parcial" title="Tienen docente en algunas secciones, pero faltan otras">Faltan secciones · {{ conteo().parcial }}</span> }
+          <span class="cob apto" title="Hay docentes que pueden dictarlos, pero ninguna sección tiene docente asignado">Sin asignar · {{ conteo().apto }}</span>
           <span class="cob sin-docente">Sin docente · {{ conteo()['sin-docente'] }}</span>
         </span>
         <label class="check"><input type="checkbox" [checked]="soloSinDocente()" (change)="soloSinDocente.set($any($event.target).checked)" /> Solo los que faltan docente</label>
@@ -146,8 +147,26 @@ interface Edicion {
           @if (dictadoEn(e); as dictado) {
             <p class="muted" style="margin: 0">Ya se dicta en: {{ dictado }}.</p>
           }
-          <p class="muted" style="margin: 0">Marcar a un docente lo deja apto para este curso: el armado de horarios le propondrá secciones. Su sección concreta se fija en Horarios.</p>
+          <p class="muted" style="margin: 0">Marcar a un docente lo deja <strong>apto</strong> para este curso (el armado de horarios le propondrá secciones). Para dejarlo <strong>asignado</strong>, elige abajo su sección.</p>
         </div>
+
+        @if (seccionesDelCurso().length) {
+          <h3 class="sub">Secciones donde se dicta</h3>
+          <div class="secciones-curso">
+            @for (s of seccionesDelCurso(); track s.id) {
+              <div class="fila-seccion" [class.on]="!!seccionDocente()[s.id]">
+                <span class="nombre"><strong>{{ s.gradoNombre }} «{{ s.nombre }}»</strong><small>{{ s.turno === 'MANANA' ? 'Mañana' : 'Tarde' }}</small></span>
+                <select [ngModel]="seccionDocente()[s.id] ?? 0" (ngModelChange)="elegirDocenteSeccion(s.id, +$event)" [attr.aria-label]="'Docente de ' + s.gradoNombre + ' ' + s.nombre">
+                  <option [ngValue]="0">Sin docente</option>
+                  @for (d of docentesOrdenados(); track d.id) { <option [ngValue]="d.id">{{ d.apellidos }}, {{ d.nombres }}</option> }
+                </select>
+              </div>
+            }
+          </div>
+          <p class="muted" style="margin: 0">{{ resumenSecciones() }} Quien elijas aquí queda también como docente apto del curso.</p>
+        } @else if (e.ficha.existente) {
+          <p class="muted" style="margin: 0">Cuando el curso esté en la malla de un grado con secciones activas, podrás asignar aquí a su docente por sección.</p>
+        }
         @if (errorForm()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorForm() }}</div> }
 
         <ng-container footer>
@@ -177,6 +196,14 @@ interface Edicion {
     .cob.asignado { color: var(--ok); background: var(--ok-soft); }
     .cob.apto { color: var(--primary); background: var(--primary-soft); }
     .cob.sin-docente { color: var(--warn); background: var(--warn-soft); }
+    .cob.parcial { color: #8a5a00; background: #fff1cf; }
+    .secciones-curso { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .fila-seccion { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1.5px solid var(--line-2); border-radius: 10px; background: var(--card); }
+    .fila-seccion.on { border-color: var(--nivel); background: var(--nivel-suave); }
+    .fila-seccion .nombre { min-width: 0; display: flex; flex-direction: column; font-size: .85rem; }
+    .fila-seccion .nombre small { color: var(--ink-2); font-size: .7rem; }
+    .fila-seccion select { max-width: 55%; min-width: 0; padding: 5px 8px; border: 1.5px solid var(--line-2); border-radius: 8px; font: inherit; background: var(--card); }
+    @media (max-width: 700px) { .secciones-curso { grid-template-columns: minmax(0, 1fr); } }
     .resumen { flex-wrap: wrap; }
     .sub { margin: 18px 0 8px; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
     .grados-nivel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -218,8 +245,35 @@ export class CursosOfertaComponent implements OnInit {
   private readonly docentes = signal<Docente[]>([]);
   protected readonly docentesCargando = signal(false);
   private readonly asignaciones = signal<Asignacion[]>([]);
+  private readonly secciones = signal<Seccion[]>([]);
   protected readonly soloSinDocente = signal(false);
-  private readonly cobertura = computed(() => coberturaCursos(this.docentes(), this.asignaciones()));
+  /** Las secciones activas de cada curso (las de los grados que lo tienen en su malla): sirven para saber si TODAS tienen docente. */
+  private readonly seccionesDeCursos = computed(() => seccionesPorCurso(this.secciones(), this.mallas()));
+  private readonly cobertura = computed(() => coberturaCursos(this.docentes(), this.asignaciones(), this.seccionesDeCursos()));
+
+  // --- Docente por sección del curso en edición ---
+  /** Por id de sección: el docente elegido (0 = sin docente). Arranca con lo que ya está asignado. */
+  protected readonly seccionDocente = signal<Record<number, number>>({});
+  protected readonly seccionesDelCurso = computed(() => {
+    const id = this.edicion()?.ficha.existente?.id;
+    return id ? [...(this.seccionesDeCursos().get(id) ?? [])].sort((a, b) => a.nivelId - b.nivelId || a.gradoNombre.localeCompare(b.gradoNombre, 'es', { numeric: true }) || a.nombre.localeCompare(b.nombre, 'es')) : [];
+  });
+  /** Docentes para el desplegable de una sección: los marcados como aptos primero. */
+  protected readonly docentesOrdenados = computed(() => {
+    const elegidos = this.docentesElegidos();
+    return [...this.docentesActivos()].sort((a, b) => Number(elegidos.has(b.id)) - Number(elegidos.has(a.id)) || a.apellidos.localeCompare(b.apellidos, 'es') || a.nombres.localeCompare(b.nombres, 'es'));
+  });
+  protected readonly resumenSecciones = computed(() => {
+    const n = this.seccionesDelCurso().length;
+    const con = this.seccionesDelCurso().filter(s => this.seccionDocente()[s.id]).length;
+    return con === n ? `Las ${n} ${n === 1 ? 'sección tiene' : 'secciones tienen'} docente.` : `${con} de ${n} ${n === 1 ? 'sección tiene' : 'secciones tienen'} docente.`;
+  });
+
+  protected elegirDocenteSeccion(seccionId: number, docenteId: number): void {
+    this.seccionDocente.update(m => ({ ...m, [seccionId]: docenteId }));
+    // Quien dicta una sección es apto para el curso: se marca en la lista de docentes.
+    if (docenteId) this.docentesElegidos.update(s => new Set([...s, docenteId]));
+  }
 
   // --- Docentes que dictan el curso en edición ---
   protected readonly filtroDocente = signal('');
@@ -253,7 +307,7 @@ export class CursosOfertaComponent implements OnInit {
   private readonly visibles = computed(() => (this.soloSinDocente() ? this.fichas().filter(f => this.cobDe(f).estado === 'sin-docente') : this.fichas()));
   protected readonly grupos = computed(() => agruparPorArea(this.visibles()));
   protected readonly conteo = computed(() => {
-    const c: Record<EstadoCobertura, number> = { asignado: 0, apto: 0, 'sin-docente': 0 };
+    const c: Record<EstadoCobertura, number> = { asignado: 0, parcial: 0, apto: 0, 'sin-docente': 0 };
     for (const f of this.fichas()) c[this.cobDe(f).estado]++;
     return c;
   });
@@ -263,7 +317,7 @@ export class CursosOfertaComponent implements OnInit {
   }
 
   protected etiqueta(e: EstadoCobertura): string {
-    return e === 'asignado' ? 'Con docente' : e === 'apto' ? 'Sin asignar' : 'Sin docente';
+    return e === 'asignado' ? 'Con docente' : e === 'parcial' ? 'Faltan secciones' : e === 'apto' ? 'Sin asignar' : 'Sin docente';
   }
 
   protected titulo(f: FichaCurso): string {
@@ -294,7 +348,10 @@ export class CursosOfertaComponent implements OnInit {
     this.api.docentes('', 0, 200).pipe(map(p => p.contenido), catchError(() => of([] as Docente[]))).subscribe(d => { this.docentes.set(d); this.docentesCargando.set(false); });
     this.api.anios().pipe(catchError(() => of([] as Anio[]))).subscribe(anios => {
       const anio = anios.find(a => a.estado === 'ACTIVO') ?? anios.find(a => a.estado === 'PLANIFICADO');
-      if (anio) this.api.asignaciones(undefined, undefined, anio.id).pipe(catchError(() => of([] as Asignacion[]))).subscribe(a => this.asignaciones.set(a));
+      if (anio) {
+        this.api.asignaciones(undefined, undefined, anio.id).pipe(catchError(() => of([] as Asignacion[]))).subscribe(a => this.asignaciones.set(a));
+        this.api.secciones(anio.id).pipe(catchError(() => of([] as Seccion[]))).subscribe(s => this.secciones.set(s));
+      }
     });
     forkJoin({ cursos: this.api.cursos(), grados: this.api.grados(), niveles: this.api.niveles() }).subscribe({
       next: ({ cursos, grados, niveles }) => {
@@ -328,7 +385,11 @@ export class CursosOfertaComponent implements OnInit {
     this.errorForm.set(null);
     // Los docentes que ya lo dictan quedan marcados.
     const cursoId = f.existente?.id;
-    this.docentesElegidos.set(new Set(cursoId ? this.docentesActivos().filter(d => d.cursoIds?.includes(cursoId)).map(d => d.id) : []));
+    // (y quien ya dicta una sección también es apto, aunque su lista de cursos no lo diga)
+    const yaDictan = new Set(this.asignaciones().filter(a => a.cursoId === cursoId).map(a => a.docenteId));
+    this.docentesElegidos.set(new Set(cursoId ? this.docentesActivos().filter(d => d.cursoIds?.includes(cursoId) || yaDictan.has(d.id)).map(d => d.id) : []));
+    // Y cada sección arranca con el docente que ya tiene asignado.
+    this.seccionDocente.set(Object.fromEntries(this.asignaciones().filter(a => a.cursoId === cursoId).map(a => [a.seccionId, a.docenteId])));
     this.filtroDocente.set('');
     this.edicion.set({ ficha: f, codigo: f.codigo, nombre: f.nombre, area: f.area === 'Otros' ? '' : f.area, grados });
   }
@@ -338,6 +399,7 @@ export class CursosOfertaComponent implements OnInit {
     const vacia: FichaCurso = { clave: 'nuevo', nombre: '', codigo: '', area: '', existente: null, estandar: null, grados: [] };
     this.errorForm.set(null);
     this.docentesElegidos.set(new Set());
+    this.seccionDocente.set({});
     this.filtroDocente.set('');
     this.edicion.set({ ficha: vacia, codigo: '', nombre: '', area: '', grados });
   }
@@ -392,12 +454,26 @@ export class CursosOfertaComponent implements OnInit {
     curso$.subscribe({
       next: curso => {
         const plan = planCambiosMalla(e.ficha.grados, deseado);
+        // Docente de cada sección: se crea, se cambia o se quita la asignación según lo elegido (solo de un curso que ya existía).
+        const porSeccion = this.seccionDocente();
+        const asignacionesCurso = this.asignaciones().filter(a => a.cursoId === curso.id);
+        const deSecciones = (e.ficha.existente ? this.seccionesDelCurso() : []).flatMap((s): Observable<unknown>[] => {
+          const quiere = porSeccion[s.id] ?? 0;
+          const actual = asignacionesCurso.find(a => a.seccionId === s.id);
+          if (quiere && !actual) return [this.api.crearAsignacion({ seccionId: s.id, cursoId: curso.id, docenteId: quiere })];
+          if (quiere && actual && actual.docenteId !== quiere) return [this.api.cambiarDocenteAsignacion(actual.id, quiere)];
+          if (!quiere && actual) return [this.api.eliminarAsignacion(actual.id)];
+          return [];
+        });
+        // Quien dicta una sección también es apto del curso, aunque se haya desmarcado en la lista.
+        const aptos = new Set([...this.docentesElegidos(), ...Object.values(porSeccion).filter(id => id > 0)]);
         const tareas = [
           ...plan.agregar.map(a => this.api.agregarCursoMalla(a.gradoId, curso.id, a.horas)),
           ...plan.cambiar.map(c => this.api.cambiarHorasMalla(c.mallaId, c.horas)),
           ...plan.quitar.map(q => this.api.quitarCursoMalla(q.mallaId)),
+          ...deSecciones,
           // Docentes que se añaden o se quitan de este curso (se actualiza la lista de cursos de cada uno).
-          ...cambiosDocentesDeCurso(this.docentes(), curso.id, this.docentesElegidos())
+          ...cambiosDocentesDeCurso(this.docentes(), curso.id, aptos)
             .map(c => this.api.actualizarDocente(c.docente.id, pedidoDeDocente(c.docente, c.cursoIds)))
         ];
         const terminar = (): void => {

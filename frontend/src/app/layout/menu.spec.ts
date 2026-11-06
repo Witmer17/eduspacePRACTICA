@@ -2,8 +2,9 @@ import { Route } from '@angular/router';
 import { routes } from '../app.routes';
 import { rutaInicial } from '../core/utils/landing';
 import { NAV_AULA, usaBarraAula } from './aula-nav';
-import { HUBS, hubDe } from './hubs';
-import { MENU, usaBarraPersonal } from './menu';
+import { HUBS, SIN_MENU_VERTICAL, hubDe } from './hubs';
+import { ATAJOS_SECRETARIA } from '../features/secretaria/atajos-secretaria';
+import { HUBS_CAJA, MENU, usaBarraPersonal } from './menu';
 
 /** Rutas hijas del shell con su regla de roles (`data.roles`); sin regla = cualquier usuario con sesión. */
 function rutasDelShell(): Map<string, string[] | undefined> {
@@ -128,17 +129,18 @@ describe('espacios de trabajo (hubs)', () => {
   });
 
   it('el menú del personal queda corto', () => {
-    expect(itemsDe('ADMIN').length).toBeLessThanOrEqual(15);
+    // 17 = 16 de siempre + «Caja → Inicio», que el admin también necesita para entrar a caja
+    expect(itemsDe('ADMIN').length).toBeLessThanOrEqual(17);
   });
 });
 
 describe('barra horizontal del personal', () => {
-  it('la usan ADMIN y SECRETARIA; quien tiene otro rol o la caja mantiene el menú lateral', () => {
+  it('la usan ADMIN, SECRETARIA y la caja; quien tiene además otro rol (docente…) mantiene el menú lateral', () => {
     expect(usaBarraPersonal(['ADMIN'])).toBe(true);
     expect(usaBarraPersonal(['SECRETARIA'])).toBe(true);
     expect(usaBarraPersonal(['ADMIN', 'SECRETARIA'])).toBe(true);
     expect(usaBarraPersonal(['ADMIN', 'DOCENTE'])).toBe(false);
-    expect(usaBarraPersonal(['CAJERO'])).toBe(false);
+    expect(usaBarraPersonal(['CAJERO'])).toBe(true);
     expect(usaBarraPersonal(['DOCENTE'])).toBe(false);
     expect(usaBarraPersonal([])).toBe(false);
   });
@@ -153,7 +155,81 @@ describe('barra horizontal del personal', () => {
     const items = MENU.filter(g => ['General', 'Gestión del colegio', 'Administración'].includes(g.titulo)).flatMap(g => g.items);
     const rutasMenu = items.filter(i => i.roles.includes('ADMIN')).map(i => i.ruta);
     expect(rutasMenu).toContain('/inicio');
-    expect(items.filter(i => i.hub && i.roles.includes('ADMIN')).length).toBe(HUBS.length);
+    // todos los espacios del personal; «Caja» es del cajero y está en su propio grupo (Ventanilla)
+    expect(items.filter(i => i.hub && i.roles.includes('ADMIN')).length).toBe(HUBS.filter(h => !HUBS_CAJA.includes(h.id)).length);
+  });
+});
+
+describe('Matrícula y secretaría', () => {
+  const rutas = rutasDelShell();
+
+  it('«Matrícula» es un espacio con el asistente por pasos, las matrículas, lo que está por aprobar y los cupos', () => {
+    const tabs = HUBS.find(h => h.id === 'matricula')!.pestanas;
+    expect(tabs.map(p => p.ruta)).toEqual(['/matricula/asistente', '/matriculas', '/matriculas/aprobaciones', '/matriculas/cupos']);
+    for (const t of tabs) expect(t.roles, t.ruta).toEqual(['ADMIN', 'SECRETARIA']);
+    expect(hubDe('/matricula/asistente')?.pestana.etiqueta).toBe('Asistente de matrícula');
+    expect(hubDe('/matriculas?nueva=1')?.hub.id).toBe('matricula');
+    expect(hubDe('/matriculas/campanias')?.hub.id).toBe('apertura');
+    for (const rol of ['ADMIN', 'SECRETARIA']) expect(itemsDe(rol).map(i => i.hub), rol).toContain('matricula');
+    expect(itemsDe('DOCENTE').some(i => i.hub === 'matricula')).toBe(false);
+  });
+
+  it('el asistente lo abren la secretaría y el administrador', () => {
+    expect(rutas.get('/matricula/asistente')).toEqual(['ADMIN', 'SECRETARIA']);
+  });
+
+  it('la secretaría entra por su propio inicio y el administrador, por el panel', () => {
+    expect(rutaInicial(['SECRETARIA'])).toBe('/secretaria');
+    expect(rutaInicial(['ADMIN'])).toBe('/inicio');
+    expect(rutaInicial(['SECRETARIA', 'ADMIN'])).toBe('/inicio');
+    expect(rutas.get('/secretaria')).toEqual(['SECRETARIA']);
+    expect(itemsDe('SECRETARIA').some(i => i.ruta === '/secretaria')).toBe(true);
+    expect(itemsDe('SECRETARIA').some(i => i.ruta === '/inicio')).toBe(false);
+    expect(itemsDe('ADMIN').some(i => i.ruta === '/secretaria')).toBe(false);
+  });
+
+  it('todos los accesos del inicio de la secretaría existen y ella puede abrirlos', () => {
+    const problemas: string[] = [];
+    for (const a of ATAJOS_SECRETARIA) {
+      if (!rutas.has(a.ruta)) { problemas.push(`${a.etiqueta}: ${a.ruta} no existe`); continue; }
+      const permitidos = rutas.get(a.ruta);
+      if (permitidos && !permitidos.includes('SECRETARIA')) problemas.push(`${a.etiqueta}: ${a.ruta} no la deja entrar`);
+    }
+    expect(problemas).toEqual([]);
+  });
+});
+
+describe('Caja', () => {
+  const rutas = rutasDelShell();
+
+  it('tiene la barra horizontal del personal con Inicio, Alumnos y Personal, para el cajero y el admin', () => {
+    expect(HUBS_CAJA.map(id => HUBS.find(h => h.id === id)!.titulo)).toEqual(['Inicio', 'Alumnos', 'Personal']);
+    expect(HUBS_CAJA.map(id => HUBS.find(h => h.id === id)!.pestanas.map(p => p.ruta))).toEqual([['/caja'], ['/caja/alumnos', '/caja/alumnos/morosos', '/caja/alumnos/cobranza'], ['/caja/personal']]);
+    for (const id of HUBS_CAJA) {
+      // Solo «Caja → Inicio» es para el admin; las demás pestañas de caja son del cajero
+      const roles = [...new Set(HUBS.find(h => h.id === id)!.pestanas.flatMap(p => p.roles))];
+      expect(roles, id).toEqual(id === 'caja' ? ['CAJERO', 'ADMIN'] : ['CAJERO']);
+      expect(itemsDe('CAJERO').some(i => i.hub === id), id).toBe(true);
+      expect(itemsDe('ADMIN').some(i => i.hub === id), id).toBe(id === 'caja');
+      for (const rol of ['SECRETARIA', 'DOCENTE', 'APODERADO', 'ALUMNO']) expect(itemsDe(rol).some(i => i.hub === id), `${rol} ${id}`).toBe(false);
+    }
+  });
+
+  it('cada página de caja solo la abre el cajero', () => {
+    for (const r of ['/caja', '/caja/alumnos', '/caja/alumnos/morosos', '/caja/alumnos/cobranza', '/caja/personal']) expect(rutas.get(r), r).toEqual(['CAJERO', 'ADMIN']);
+  });
+
+  it('cada página cae en su espacio; solo Alumnos (varias páginas) lleva menú vertical', () => {
+    expect(hubDe('/caja')?.hub.id).toBe('caja');
+    expect(hubDe('/caja/alumnos')?.pestana.etiqueta).toBe('Cuentas por alumno');
+    expect(hubDe('/caja/alumnos/morosos')?.pestana.etiqueta).toBe('Morosos');
+    expect(hubDe('/caja/alumnos/cobranza')?.hub.id).toBe('caja-alumnos');
+    expect(hubDe('/caja/personal')?.hub.id).toBe('caja-personal');
+    expect(SIN_MENU_VERTICAL).toEqual(['caja', 'caja-personal']);
+  });
+
+  it('el pago al personal del administrador sigue siendo solo suyo (aprueba lo que caja registra)', () => {
+    expect(rutas.get('/personal/pagos')).toEqual(['ADMIN']);
   });
 });
 
@@ -181,7 +257,7 @@ describe('Personal y Configuración (barra superior del personal)', () => {
   it('Configuración reúne todo lo configurable del colegio, en orden y por grupos', () => {
     const tabs = HUBS.find(h => h.id === 'configuracion')!.pestanas;
     expect(tabs.map(p => p.ruta)).toEqual([
-      '/configuracion', '/configuracion/colegio', '/configuracion/grados', '/configuracion/cursos', '/configuracion/estructura', '/configuracion/areas'
+      '/configuracion', '/configuracion/colegio', '/configuracion/grados', '/configuracion/cursos', '/configuracion/estructura', '/configuracion/areas', '/configuracion/horarios'
     ]);
     // el resumen abre el espacio y no tiene grupo; el resto sí, y los grupos van seguidos (un grupo no se parte en dos)
     expect(tabs[0].grupo).toBeUndefined();
@@ -208,17 +284,35 @@ describe('Personal y Configuración (barra superior del personal)', () => {
     expect(MENU.flatMap(g => g.items).some(i => i.hub === 'apertura' && i.roles.includes('SECRETARIA'))).toBe(true);
   });
 
-  it('las campañas y las tarifas ya no están en Matrícula ni en Finanzas', () => {
+  it('las campañas y las tarifas ya no están en Alumnos ni en Finanzas', () => {
     const fuera = (id: string) => HUBS.find(h => h.id === id)!.pestanas.map(p => p.ruta);
-    expect(fuera('matricula')).not.toContain('/matriculas/campanias');
+    expect(fuera('alumnos')).not.toContain('/matriculas/campanias');
     expect(fuera('finanzas')).not.toEqual(expect.arrayContaining(['/pagos/conceptos']));
-    expect(fuera('finanzas')).toEqual(['/finanzas', '/pagos/cuentas', '/pagos/cobranza', '/pagos/morosos']);
+    expect(fuera('finanzas')).toEqual(['/finanzas', '/pagos/cobranza', '/pagos/morosos']);
+  });
+
+  it('Alumnos reúne alumnos, apoderados, matrícula, asistencia, notas y cuentas, por grupos, y está en la barra horizontal', () => {
+    const tabs = HUBS.find(h => h.id === 'alumnos')!.pestanas;
+    expect(tabs.map(p => p.ruta)).toEqual([
+      '/alumnos', '/apoderados', '/alumnos/importar',
+      '/asistencia/justificaciones', '/asistencia/reporte', '/calificaciones/boletines', '/pagos/cuentas', '/documentos'
+    ]);
+    const grupos = tabs.map(p => p.grupo);
+    expect(grupos.filter((g, i) => g !== grupos[i - 1])).toEqual(['Alumnos', 'Asistencia y notas', 'Pagos', 'Documentos']);
+    // la entrada va a la lista de alumnos, que abren ADMIN y SECRETARIA
+    expect(tabs[0].roles).toEqual(expect.arrayContaining(['ADMIN', 'SECRETARIA']));
+    expect(hubDe('/apoderados')?.pestana.etiqueta).toBe('Apoderados');
+    expect(hubDe('/documentos')?.hub.id).toBe('alumnos');
+    expect(hubDe('/alumnos/12')?.hub.id).toBe('alumnos');
+    expect(hubDe('/calificaciones/boletines')?.hub.id).toBe('alumnos');
+    expect(hubDe('/calificaciones/cierre')?.hub.id).toBe('seguimiento');
+    for (const rol of ['ADMIN', 'SECRETARIA']) expect(itemsDe(rol).map(i => i.hub), rol).toContain('alumnos');
   });
 
   it('la secretaria ve en Configuración todo menos lo de cobranza (solo del administrador)', () => {
     const visibles = (id: string) => HUBS.find(h => h.id === id)!.pestanas.filter(p => p.roles.includes('SECRETARIA')).map(p => p.ruta);
     expect(visibles('personal')).toEqual(['/personal', '/areas', '/personal/asistencia']);
-    expect(visibles('configuracion')).toHaveLength(6);
+    expect(visibles('configuracion')).toHaveLength(7);
     expect(visibles('apertura')).not.toContain('/pagos/tarifas');
   });
 

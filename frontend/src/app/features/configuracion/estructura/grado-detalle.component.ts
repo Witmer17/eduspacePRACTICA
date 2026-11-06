@@ -1,8 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
-import { forkJoin, of } from 'rxjs';
+import { ActivatedRoute, RouterLink } from '@angular/router';import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import {
   Anio, Asignacion, Aula, Bloque, Curso, Docente, Grado, HorarioSeccion, MallaGrado, MallaItem, Nivel, Seccion, Turno
@@ -59,7 +58,8 @@ export class GradoDetalleComponent {
   protected readonly puedeEditar = this.auth.isAdmin;
   protected readonly puedeAsignar = computed(() => this.auth.tieneAlgunRol(['ADMIN', 'SECRETARIA']));
 
-  private readonly gradoId = toSignal(inject(ActivatedRoute).paramMap.pipe(map(p => Number(p.get('gradoId')))), { initialValue: 0 });
+  private readonly rutaActual = inject(ActivatedRoute);
+  private readonly gradoId = toSignal(this.rutaActual.paramMap.pipe(map(p => Number(p.get('gradoId')))), { initialValue: 0 });
 
   protected readonly cargando = signal(true);
   protected readonly noExiste = signal(false);
@@ -213,7 +213,9 @@ export class GradoDetalleComponent {
         }
         this.grado.set(grado);
         this.nivel.set(niveles.find(n => n.id === grado.nivelId) ?? null);
-        const anio = anios.find(a => a.estado === 'ACTIVO') ?? anios[0] ?? null;
+        // El año que venía en la URL (desde la tarjeta de Estructura académica); si no, el activo o el que se está abriendo.
+        const pedido = Number(this.rutaActual.snapshot.queryParamMap.get('anioId'));
+        const anio = anios.find(a => a.id === pedido) ?? anios.find(a => a.estado === 'ACTIVO') ?? null;
         this.anio.set(anio);
         this.cargarDatos(grado, anio);
       },

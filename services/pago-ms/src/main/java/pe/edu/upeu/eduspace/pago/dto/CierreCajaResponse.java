@@ -17,6 +17,8 @@ public class CierreCajaResponse {
     private BigDecimal montoApertura;
     private BigDecimal cobrosEfectivo;
     private BigDecimal cobrosOtrosMedios;
+    /** Lo recibido como depósitos al crédito de los alumnos: ya está incluido en los cobros por medio y en el efectivo esperado. */
+    private BigDecimal depositosCredito;
     private BigDecimal totalCobrado;
     private BigDecimal efectivoEsperado;
     private BigDecimal montoDeclarado;

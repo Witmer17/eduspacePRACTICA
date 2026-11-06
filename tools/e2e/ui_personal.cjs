@@ -85,16 +85,21 @@ async function hasta(leer, ok, msg, ms = 8000) {
     await page.click('button:has-text("Agregar personal")');
     await page.waitForSelector('app-modal #form-personal');
     const pasos = (await page.locator('app-modal ol.pasos li:not(.separador)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-    esperar(pasos.length === 3, 'se esperaban 3 pasos (datos, contrato, cursos): ' + pasos.join(' / '));
+    esperar(pasos.length === 4, 'se esperaban 4 pasos (datos, contrato, cuenta de depósito, cursos): ' + pasos.join(' / '));
+    esperar(/Cuenta de depósito/.test(pasos.join(' ')), 'falta el paso de la cuenta de depósito: ' + pasos.join(' / '));
     esperar(await page.getByRole('button', { name: /Guardar y seguir: contrato y cursos/ }).isVisible(), 'falta el botón «Guardar y seguir»');
   }, page);
-  await paso('rellena los datos y elige el curso Matemática', async () => {
+  await paso('los cursos NO se piden en los datos (se eligen una sola vez, en el paso «Cursos»)', async () => {
+    esperar(await page.locator('app-modal .bloque-cursos, app-modal .lista-cursos').count() === 0, 'sigue la lista de cursos en el primer paso');
+    esperar(!(await page.locator('app-modal').innerText()).includes('Cursos que dictará'), 'sigue el título «Cursos que dictará»');
+    esperar((await page.locator('app-modal').innerText()).includes('paso «Cursos»'), 'no explica dónde se eligen los cursos');
+  }, page);
+  await paso('rellena los datos del docente', async () => {
     await page.fill('#p-num', DOC);
     await page.fill('#p-nombres', NOMBRE);
     await page.fill('#p-apellidos', APELLIDO);
     await page.fill('#p-email', `ui${sufijo}@colegio.pe`);
-    await page.locator('.lista-cursos .curso', { has: page.locator('strong', { hasText: /^Matemática$/ }) }).first().click();
-    await hasta(() => page.locator('.bloque-cursos .cab .muted').innerText(), t => t.includes('1 elegido'), 'no quedó 1 curso elegido');
+    await page.fill('#p-cargo', 'Docente de Matemática');
   }, page);
   await paso('«Guardar y seguir» pasa al contrato en la misma ventana', async () => {
     await page.getByRole('button', { name: /Guardar y seguir: contrato y cursos/ }).click();
@@ -133,31 +138,59 @@ async function hasta(leer, ok, msg, ms = 8000) {
     await page.fill('#ct-rem', '1500');
     await hasta(() => page.getByRole('button', { name: /Crear contrato/ }).isEnabled(), e => e, 'el botón debería volver a habilitarse');
   }, page);
-  await paso('crea el contrato y sigue a «Cursos»', async () => {
+  await paso('el contrato NO vuelve a pedir el cargo (lo hereda de los datos)', async () => {
+    esperar(creado, 'no se guardó la persona');
+    esperar(await page.locator('#ct-cargo').count() === 0, 'el contrato sigue pidiendo el cargo');
+  }, page);
+  await paso('crea el contrato y sigue a la cuenta de depósito', async () => {
     esperar(creado, 'no se guardó la persona');
     await page.getByRole('button', { name: /Crear contrato y seguir/ }).click();
+    await hasta(() => page.locator('app-modal').innerText(), t => t.includes('Cuenta de depósito de ' + NOMBRE), 'no llegó al paso de la cuenta de depósito');
+    await page.waitForSelector('app-modal #form-cuenta');
+    esperar(await page.inputValue('#cu-titular') === `${NOMBRE} ${APELLIDO}`, 'el titular no viene con el nombre de la persona');
+    await foto('04-deposito');
+  }, page);
+  await paso('la cuenta valida en vivo: número corto, Yape sin CCI y botón de guardar', async () => {
+    esperar(creado, 'no se guardó la persona');
+    await page.fill('#cu-numero', '123');
+    await hasta(() => page.locator('app-modal').innerText(), t => t.includes('entre 8 y 20 dígitos'), 'no avisa que el número es corto');
+    await page.getByRole('button', { name: /Guardar cuenta y seguir/ }).click();
+    await hasta(() => page.locator('app-modal .aviso-danger').innerText(), t => t.includes('8 y 20 dígitos'), 'guardó con un número inválido');
+    await page.selectOption('#cu-banco', 'YAPE');
+    esperar(await page.locator('#cu-cci').count() === 0, 'Yape no debería pedir CCI');
+    esperar(await page.inputValue('#cu-tipo') === 'BILLETERA', 'Yape debería poner el tipo en Billetera');
+    await page.selectOption('#cu-banco', 'BCP');
+    esperar(await page.inputValue('#cu-tipo') === 'AHORROS', 'al volver a un banco el tipo debería volver a Ahorros');
+    await page.fill('#cu-numero', '194-12345678-0-12');
+  }, page);
+  await paso('guarda la cuenta y sigue a «Cursos»', async () => {
+    esperar(creado, 'no se guardó la persona');
+    await page.getByRole('button', { name: /Guardar cuenta y seguir/ }).click();
     await hasta(() => page.locator('app-modal').innerText(), t => t.includes('Cursos de ' + NOMBRE), 'no llegó al paso de cursos');
     await page.waitForSelector('app-modal .carga-asig');
-    await foto('04-cursos');
+    await foto('05-cursos');
   }, page);
-  await paso('elige los cursos sugeridos libres y la carga semanal se actualiza', async () => {
+  await paso('en «Cursos» se eligen por sección (con buscador) y la carga semanal se actualiza', async () => {
     esperar(creado, 'no se guardó la persona');
-    await page.waitForSelector('app-modal .carga-asig');
-    const btn = page.getByRole('button', { name: /Elegir todos los sugeridos libres/ });
-    esperar(await btn.isEnabled(), 'no hay cursos sugeridos libres (¿Matemática está en la malla de alguna sección activa?)');
-    await btn.click();
+    esperar(await page.locator('app-modal .buscar-asig').isVisible(), 'falta el buscador de cursos');
+    await page.fill('.buscar-asig', 'Matemática');
+    const libre = page.locator('app-modal .curso-asig:not(.ocupado) input[type=checkbox]:not(:disabled)').first();
+    await libre.waitFor();
+    await libre.check();
     await hasta(() => page.locator('.carga-asig').innerText(), t => /\+[1-9]\d* h/.test(t), 'la carga no sumó horas');
-    await foto('05-cursos-elegidos');
+    await foto('06-cursos-elegidos');
   }, page);
   await paso('asigna los cursos y la ventana se cierra', async () => {
     esperar(creado, 'no se guardó la persona');
     await page.getByRole('button', { name: /^Asignar \d+ cursos?$/ }).click();
     await page.waitForSelector('app-modal', { state: 'detached' });
   }, page);
-  await paso('la persona aparece en la tabla de Personal', async () => {
+  await paso('la persona aparece en la tabla de Personal y lo asignado quedó como su lista de cursos', async () => {
     await page.fill('input[type=search]', DOC);
     await page.click('button:has-text("Buscar")');
-    await page.waitForSelector(`table.tabla-personal tbody tr:has-text("${APELLIDO}")`);
+    const fila = page.locator(`table.tabla-personal tbody tr:has-text("${APELLIDO}")`);
+    await fila.waitFor();
+    await hasta(() => fila.innerText(), t => /1 curso: Matem/.test(t.replace(/\s+/g, ' ')), 'la lista de cursos del docente no se actualizó con lo asignado');
   }, page);
 
   console.log('== Asistencia del personal');
@@ -192,6 +225,7 @@ async function hasta(leer, ok, msg, ms = 8000) {
     const txt = (await t.innerText()).replace(/\s+/g, ' ');
     esperar(/Vigente/.test(txt) && /Plazo fijo/.test(txt), 'contrato: ' + txt.slice(0, 200));
     esperar(/S\/\s*1,?500\.00/.test(txt), 'sueldo: ' + txt.slice(0, 300));
+    esperar(/BCP/.test(txt) && /8012/.test(txt), 'la cuenta de depósito registrada en el asistente no aparece en la tarjeta: ' + txt.slice(0, 400));
     esperar(await t.locator('.dia.danger strong').innerText().then(x => x.trim() === '1'), 'la falta no aparece en la tarjeta');
     await foto('07-tarjeta');
   }, page);

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import pe.edu.upeu.eduspace.matricula.client.AlumnosClient;
 import pe.edu.upeu.eduspace.matricula.client.AlumnosGateway;
+import pe.edu.upeu.eduspace.matricula.client.PagoClient;
 import pe.edu.upeu.eduspace.matricula.client.PlanificacionClient;
 import pe.edu.upeu.eduspace.matricula.client.PlanificacionGateway;
 import pe.edu.upeu.eduspace.matricula.config.KafkaConfig;
@@ -43,12 +44,15 @@ public class MatriculaService {
     private final AlumnosGateway alumnos;
     private final PlanificacionGateway planificacion;
     private final MatriculaProperties props;
+    private final PagoClient pagoClient;
+    private final MatriculaPublicaRepository publicas;
     private final TransactionTemplate tx;
 
     public MatriculaService(MatriculaRepository matriculaRepository, CampaniaRepository campaniaRepository,
                             RequisitoRepository requisitoRepository, HistorialRepository historialRepository,
                             CupoService cupoService, EventoOutboxService outbox, AlumnosGateway alumnos,
                             PlanificacionGateway planificacion, MatriculaProperties props,
+                            PagoClient pagoClient, MatriculaPublicaRepository publicas,
                             PlatformTransactionManager txManager) {
         this.matriculaRepository = matriculaRepository;
         this.campaniaRepository = campaniaRepository;
@@ -59,6 +63,8 @@ public class MatriculaService {
         this.alumnos = alumnos;
         this.planificacion = planificacion;
         this.props = props;
+        this.pagoClient = pagoClient;
+        this.publicas = publicas;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -122,24 +128,31 @@ public class MatriculaService {
     /** Validaciones externas fuera de la transacción; cupo + matrícula + historial + outbox en UNA transacción. */
     public MatriculaResponse crear(MatriculaCreateRequest req, Long usuarioId) {
         return crearInterno(req.alumnoId(), req.seccionId(), req.tipo() != null ? req.tipo() : "NUEVA",
-            req.observaciones(), null, usuarioId);
+            req.observaciones(), null, usuarioId, true, props.getDiasVigenciaPrematricula(), req.planPago());
     }
 
     MatriculaResponse crearInterno(Long alumnoId, Long seccionId, String tipo, String observaciones,
                                    Long matriculaAnteriorId, Long usuarioId) {
-        return crearInterno(alumnoId, seccionId, tipo, observaciones, matriculaAnteriorId, usuarioId, true, props.getDiasVigenciaPrematricula());
+        return crearInterno(alumnoId, seccionId, tipo, observaciones, matriculaAnteriorId, usuarioId, true, props.getDiasVigenciaPrematricula(), null);
     }
 
     /**
      * Pre-matrícula de la matrícula en línea: el expediente (DNI, partida y ficha SIAGIE) se verifica después en secretaría,
      * y la reserva vence pronto (el cupo no queda retenido si no se paga).
      */
-    public MatriculaResponse crearEnLinea(Long alumnoId, Long seccionId, int diasVigencia) {
-        return crearInterno(alumnoId, seccionId, "NUEVA", "Matrícula en línea (sitio web)", null, null, false, diasVigencia);
+    public MatriculaResponse crearEnLinea(Long alumnoId, Long seccionId, int diasVigencia, String planPago) {
+        return crearInterno(alumnoId, seccionId, "NUEVA", "Matrícula en línea (sitio web)", null, null, false, diasVigencia, planPago);
+    }
+
+    /** La forma de pago acordada: sin dato (o desconocida) es mensual, como se generaban las cuotas antes. */
+    static String planValido(String planPago) {
+        if (planPago == null || planPago.isBlank()) return "MENSUAL";
+        String p = planPago.trim().toUpperCase();
+        return List.of("MENSUAL", "BIMESTRAL", "SEMESTRAL", "ANUAL").contains(p) ? p : "MENSUAL";
     }
 
     private MatriculaResponse crearInterno(Long alumnoId, Long seccionId, String tipo, String observaciones,
-                                           Long matriculaAnteriorId, Long usuarioId, boolean exigirExpediente, int diasVigencia) {
+                                           Long matriculaAnteriorId, Long usuarioId, boolean exigirExpediente, int diasVigencia, String planPago) {
         PlanificacionClient.Seccion sec = planificacion.seccion(seccionId);
         var campania = campaniaRepository.findFirstByAnioIdAndEstado(sec.anioId(), "ABIERTA")
             .orElseThrow(() -> new BusinessRuleException("No hay una campaña de matrícula ABIERTA para el año de la sección."));
@@ -181,6 +194,7 @@ public class MatriculaService {
                 .campaniaId(campania.getId())
                 .tipo(tipo)
                 .estado("PRE_MATRICULA")
+                .planPago(planValido(planPago))
                 .matriculaAnteriorId(matriculaAnteriorId)
                 .venceEn(ahora.plusDays(diasVigencia))
                 .observaciones(observaciones)
@@ -238,6 +252,66 @@ public class MatriculaService {
         m.setActualizadoEn(LocalDateTime.now());
         matriculaRepository.save(m);
         historial(m.getId(), "PAGO", anterior, "POR_APROBAR", null, null, "Pago de matrícula " + pagoId + "; pendiente de aprobación", null);
+    }
+
+    /**
+     * Pago confirmado de la matrícula hecho en caja, con la pasarela o con el crédito: si la cuota de matrícula quedó pagada POR COMPLETO, la
+     * matrícula se GENERA aquí mismo (MATRICULADO + {@code matricula.confirmada}: pensiones, asistencia, tareas…), sin el paso «Por aprobar».
+     * Un pago parcial no la genera. La matrícula en línea del sitio público sigue su camino de siempre (POR_APROBAR, con el acceso por correo).
+     * Idempotente: si ya estaba POR_APROBAR o MATRICULADO no hace nada.
+     */
+    @Transactional
+    public void confirmarYGenerarPorPago(Long matriculaId, Long pagoId) {
+        Matricula m = matriculaRepository.findById(matriculaId)
+            .orElseThrow(() -> new ResourceNotFoundException("Matrícula no encontrada: " + matriculaId));
+        if ("MATRICULADO".equals(m.getEstado()) || "POR_APROBAR".equals(m.getEstado())) {
+            log.info("Matrícula {} ya tenía el pago registrado ({}); pago {} ignorado.", matriculaId, m.getEstado(), pagoId);
+            return;
+        }
+        if (!"PRE_MATRICULA".equals(m.getEstado())) {
+            confirmarPorPago(matriculaId, pagoId);   // deja la alerta de siempre para decisión manual
+            return;
+        }
+        // Matrícula en línea: queda POR_APROBAR, salvo la que pidió descuento por hermano. Esa ya pasó por la secretaría (confirmó el parentesco y la dejó
+        // en deuda) y no se puede pagar antes, así que quien paga en caja o desde la cuenta del apoderado queda matriculado en el acto.
+        if (publicas.existsByMatriculaId(matriculaId) && !publicas.findById(matriculaId).map(p -> p.getHermanoDocumento() != null).orElse(false)) {
+            confirmarPorPago(matriculaId, pagoId);
+            return;
+        }
+        if (!matriculaPagadaPorCompleto(matriculaId)) {
+            historial(m.getId(), "PAGO", m.getEstado(), m.getEstado(), null, null,
+                "Pago " + pagoId + " de la matrícula; todavía falta pagar el resto para generarla.", null);
+            log.info("Matrícula {}: pago {} parcial, no se genera todavía.", matriculaId, pagoId);
+            return;
+        }
+        LocalDateTime ahora = LocalDateTime.now();
+        m.setEstado("MATRICULADO");
+        m.setPagadaEn(ahora);
+        m.setConfirmadaEn(ahora);
+        m.setAprobadaEn(ahora);
+        m.setVenceEn(null);
+        m.setActualizadoEn(ahora);
+        matriculaRepository.save(m);
+        historial(m.getId(), "PAGO", "PRE_MATRICULA", "MATRICULADO", null, null, "Pago de matrícula " + pagoId + " completo; matrícula generada", null);
+        outbox.registrar(KafkaConfig.TOPIC_MATRICULA_CONFIRMADA, eventoConNombres(m, null, null));
+        log.info("Matrícula {} generada por el pago {}.", m.getCodigo(), pagoId);
+    }
+
+    /** Alarga la reserva de una pre-matrícula (por ejemplo cuando la secretaría tardó en resolver un descuento y la familia necesita tiempo para pagar). */
+    @Transactional
+    public void extenderReserva(Long matriculaId, int dias) {
+        Matricula m = matriculaRepository.findById(matriculaId)
+            .orElseThrow(() -> new ResourceNotFoundException("Matrícula no encontrada: " + matriculaId));
+        if (!"PRE_MATRICULA".equals(m.getEstado())) return;
+        m.setVenceEn(LocalDateTime.now().plusDays(dias));
+        m.setActualizadoEn(LocalDateTime.now());
+        matriculaRepository.save(m);
+    }
+
+    /** ¿La cuota de matrícula ya no debe nada? Se consulta a pago-ms (el evento no dice cuánto queda). */
+    private boolean matriculaPagadaPorCompleto(Long matriculaId) {
+        var cuotas = pagoClient.cuotas(matriculaId).stream().filter(c -> "MATRICULA".equalsIgnoreCase(c.concepto())).toList();
+        return !cuotas.isEmpty() && cuotas.stream().allMatch(c -> c.saldo() != null && c.saldo().signum() == 0);
     }
 
     // ------------------------------------------------------------------ aprobación administrativa
@@ -372,6 +446,7 @@ public class MatriculaService {
             .gradoId(m.getGradoId()).gradoNombre(gradoNombre)
             .seccionId(m.getSeccionId()).seccionNombre(seccionNombre)
             .estado(m.getEstado()).tipo(m.getTipo()).motivo(motivo).seccionAnteriorId(seccionAnterior)
+            .planPago(m.getPlanPago())
             .build();
     }
 

@@ -3,9 +3,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, ViewEncapsulation, computed, inject, signal } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { GradoOferta, InicioMatricula, OfertaMatricula, ResumenMatricula } from '../../core/models/matricula-publica.model';
+import { DescuentoHermanoOferta, DescuentoVista, GradoOferta, InicioMatricula, OfertaMatricula, ResumenMatricula } from '../../core/models/matricula-publica.model';
+import { PlanPago } from '../../core/models/matricula.model';
+import { AYUDA_PLAN, resumenDelPlan } from '../matriculas/plan-pago';
 import { MatriculaPublicaService } from '../../core/services/matricula-publica.service';
 import { ModalComponent } from '../../shared/components/modal/modal.component';
+import { costosConDescuento, normalizarCodigo, textoAplica, textoValor } from './descuento-matricula';
 
 type Paso = 'grado' | 'datos' | 'pago' | 'listo';
 
@@ -101,6 +104,15 @@ const documentoValido = (control: AbstractControl): ValidationErrors | null => {
                   <div class="pub-campo"><label for="a-sx">Sexo</label>
                     <select id="a-sx" class="pub-input" formControlName="sexo"><option value="F">Femenino</option><option value="M">Masculino</option></select></div>
                 </div>
+                <div class="mel-fila">
+                  <div class="pub-campo"><label for="a-dir">Dirección <small>(opcional)</small></label><input id="a-dir" class="pub-input" formControlName="direccion" autocomplete="street-address" /></div>
+                  <div class="pub-campo"><label for="a-dis">Distrito <small>(opcional)</small></label><input id="a-dis" class="pub-input" formControlName="distrito" autocomplete="address-level2" /></div>
+                </div>
+                <div class="mel-fila">
+                  <div class="pub-campo"><label for="a-col">Colegio de procedencia <small>(opcional)</small></label><input id="a-col" class="pub-input" formControlName="colegioProcedencia" autocomplete="off" /></div>
+                  <div class="pub-campo"><label for="a-mail">Correo del alumno <small>(opcional)</small></label><input id="a-mail" type="email" class="pub-input" formControlName="email" autocomplete="off" />
+                    @if (malo('alumno.email')) { <span class="mel-msg">El correo no es válido.</span> }</div>
+                </div>
               </fieldset>
 
               <fieldset class="pub-tarjeta" formGroupName="apoderado">
@@ -128,7 +140,7 @@ const documentoValido = (control: AbstractControl): ValidationErrors | null => {
               </fieldset>
             </div>
             <!-- campo trampa: las personas no lo ven -->
-            <div class="mel-trampa" aria-hidden="true"><label>No lo llenes <input type="text" tabindex="-1" autocomplete="off" formControlName="sitio" /></label></div>
+            <div class="mel-trampa" aria-hidden="true"><label>No lo llenes <input type="text" tabindex="-1" autocomplete="off" readonly data-lpignore="true" data-1p-ignore="true" (focus)="$any($event.target).removeAttribute('readonly')" formControlName="sitio" /></label></div>
             <div class="mel-acc">
               <button type="button" class="pub-btn pub-btn-borde" (click)="ir('grado')">Atrás</button>
               <button type="submit" class="pub-btn pub-btn-primario">Revisar y pagar</button>
@@ -148,23 +160,92 @@ const documentoValido = (control: AbstractControl): ValidationErrors | null => {
                 <div><dt>Documento</dt><dd>{{ f.alumno.value.tipoDocumento }} {{ f.alumno.value.numeroDocumento }}</dd></div>
                 <div><dt>Apoderado</dt><dd>{{ f.apoderado.value.nombres }} {{ f.apoderado.value.apellidos }}</dd></div>
                 <div><dt>Correo</dt><dd>{{ f.apoderado.value.email || 'No indicado (descargarás la constancia aquí)' }}</dd></div>
+                <div><dt>Forma de pago</dt><dd>{{ planActual()?.etiqueta ?? 'Mensual' }}</dd></div>
               </dl>
               @if (inicio(); as i) { <div class="pub-ok">Tu vacante está reservada en la sección <b>{{ i.seccion }}</b> ({{ i.turno }}) hasta el {{ i.vencePago }}.</div> }
             </div>
             <div class="pub-tarjeta">
               <h3>Costos</h3>
-              <div class="mel-cuenta"><span>Matrícula (se paga ahora)</span><b>S/ {{ (inicio()?.montoMatricula ?? gradoActual()?.matricula ?? 0) | number: '1.2-2' }}</b></div>
-              @if (gradoActual()?.pension; as p) {
-                <div class="mel-cuenta"><span>Pensión: {{ p.cuotas }} cuotas de</span><b>S/ {{ p.mensual | number: '1.2-2' }}</b></div>
+              @let c = costos();
+              @if (c.matricula; as m) {
+                <div class="mel-cuenta"><span>Matrícula</span><b>S/ {{ m.base | number: '1.2-2' }}</b></div>
+                @if (m.descuento > 0) {
+                  <div class="mel-cuenta mel-desc"><span>Descuento «{{ descuento()?.nombre }}»</span><b>− S/ {{ m.descuento | number: '1.2-2' }}</b></div>
+                }
+                <div class="mel-cuenta mel-total"><span>Matrícula a pagar ahora</span><b>S/ {{ m.total | number: '1.2-2' }}</b></div>
+              }
+              @if (c.pension; as p) {
+                @if (p.descuentoTotal > 0) {
+                  <div class="mel-cuenta"><span>Pensión: {{ p.cuotas }} cuotas de</span><b><s class="mel-tachado">S/ {{ p.mensualBase | number: '1.2-2' }}</s> S/ {{ p.mensual | number: '1.2-2' }}</b></div>
+                  <div class="mel-cuenta mel-desc"><span>Descuento en las pensiones</span><b>− S/ {{ p.descuentoTotal | number: '1.2-2' }}</b></div>
+                } @else {
+                  <div class="mel-cuenta"><span>Pensión: {{ p.cuotas }} cuotas de</span><b>S/ {{ p.mensual | number: '1.2-2' }}</b></div>
+                }
                 <div class="mel-cuenta"><span>Total de pensiones</span><b>S/ {{ p.total | number: '1.2-2' }}</b></div>
               }
+
+              <!-- Forma de pago de las pensiones -->
+              @if (planes().length > 1) {
+                <div class="mel-planes">
+                  <strong id="mel-planes-t">Forma de pago de las pensiones</strong>
+                  <div class="mel-planes-lista" role="radiogroup" aria-labelledby="mel-planes-t">
+                    @for (p of planes(); track p.id) {
+                      <button type="button" role="radio" class="mel-plan" [class.sel]="planElegido() === p.id" [attr.aria-checked]="planElegido() === p.id" [disabled]="!!inicio()" (click)="planElegido.set(p.id)">
+                        <b>{{ p.etiqueta }}</b>
+                        <small>{{ p.ayuda }}</small>
+                        @if (p.resumen; as r) { <small>{{ r.cuotas }} {{ r.cuotas === 1 ? 'cuota' : 'cuotas' }} de S/ {{ r.cuota | number: '1.2-2' }}</small> }
+                        @if (p.porcentaje > 0) { <span class="mel-plan-desc">{{ p.porcentaje }} % de descuento</span> }
+                      </button>
+                    }
+                  </div>
+                  @if (planActual()?.resumen; as r) {
+                    <p class="muted mel-codigo-nota">Con el plan {{ planActual()!.etiqueta.toLowerCase() }} pagarías en total S/ {{ r.total | number: '1.2-2' }} por las pensiones@if (r.descuento > 0) { (ahorras S/ {{ r.descuento | number: '1.2-2' }}) }.</p>
+                  }
+                </div>
+              }
+
+              <!-- Descuento por hermano matriculado: solo el documento del hermano; la secretaría confirma el parentesco antes de que se pueda pagar -->
+              @if (hermanosDisponibles().length) {
+                <div class="mel-hermano">
+                  <label class="pub-check">
+                    <input type="checkbox" [checked]="conHermano()" [disabled]="trabajando() || !!inicio()" (change)="alternarHermano($any($event.target).checked)" />
+                    <span><b>Tengo un hermano ya matriculado en el colegio</b> y quiero pedir el descuento.</span>
+                  </label>
+                  @if (conHermano()) {
+                    <div class="pub-campo"><label for="h-doc">Documento (DNI) de tu hermano</label>
+                      <input id="h-doc" class="pub-input" [formControl]="documentoHermano" inputmode="numeric" autocomplete="off" maxlength="20" placeholder="Número de documento" />
+                      @if (documentoHermanoMalo()) { <span class="mel-msg">Escribe el documento de tu hermano (6 a 20 letras o números).</span> }</div>
+                    <p class="muted mel-codigo-nota">Con solo ese número la secretaría busca a tu hermano y <b>confirma el parentesco</b> antes de dejar la matrícula lista para pagar; entonces te avisamos por correo.
+                      Por eso <b>necesitamos tu correo</b> (en el paso «Datos»). No se paga ahora: lo harás desde tu cuenta de apoderado o en caja.</p>
+                    @if (!correoApoderado()) { <span class="mel-msg">Escribe tu correo en el paso «Datos» para pedir el descuento.</span> }
+                  }
+                </div>
+              }
+
+              <!-- Código de descuento (opcional) -->
+              <div class="mel-codigo">
+                @if (descuento(); as d) {
+                  <div class="mel-codigo-ok" role="status">
+                    <div><strong>Código {{ d.codigo }}</strong> · {{ d.nombre }} <span class="muted">({{ textoValor(d) }} en {{ textoAplica(d.aplicaA) }})</span></div>
+                    @if (!inicio()) { <button type="button" class="pub-btn pub-btn-borde mel-mini" [disabled]="trabajando()" (click)="quitarCodigo()">Quitar</button> }
+                  </div>
+                  @if (!c.hayDescuento) { <p class="muted mel-codigo-nota">Este descuento no aplica al grado elegido: los costos no cambian.</p> }
+                } @else {
+                  <label for="mel-codigo-in">¿Tienes un código de descuento? <span class="muted">(opcional)</span></label>
+                  <div class="mel-codigo-fila">
+                    <input id="mel-codigo-in" class="pub-input" [formControl]="codigo" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Ej. HERMANOS10" (keydown.enter)="$event.preventDefault(); aplicarCodigo()" />
+                    <button type="button" class="pub-btn pub-btn-borde" [disabled]="verificandoCodigo() || trabajando()" (click)="aplicarCodigo()">{{ verificandoCodigo() ? 'Validando…' : 'Aplicar' }}</button>
+                  </div>
+                  @if (errorCodigo()) { <div class="mel-error" role="alert">{{ errorCodigo() }}</div> }
+                }
+              </div>
               <p class="muted" style="font-size: .85rem">Las pensiones se pagan después en el portal de familias o en caja. Se generan cuando se aprueba la matrícula.</p>
               <label class="pub-check"><input type="checkbox" [checked]="acepto()" (change)="acepto.set($any($event.target).checked)" /><span>Acepto el tratamiento de mis datos personales y los del alumno para el proceso de matrícula.</span></label>
               @if (error()) { <div class="mel-error" role="alert">{{ error() }}</div> }
               <div class="mel-acc" style="justify-content: space-between">
                 <button type="button" class="pub-btn pub-btn-borde" [disabled]="trabajando()" (click)="ir('datos')">Atrás</button>
                 @if (inicio()) { <button type="button" class="pub-btn pub-btn-borde" [disabled]="trabajando()" (click)="nuevaMatricula()">Empezar de nuevo</button> }
-                <button type="button" class="pub-btn pub-btn-oro pub-btn-grande" [disabled]="!acepto() || trabajando()" (click)="reservarYPagar()">{{ trabajando() ? 'Reservando…' : 'Pagar la matrícula' }}</button>
+                <button type="button" class="pub-btn pub-btn-oro pub-btn-grande" [disabled]="botonBloqueado()" (click)="reservarYPagar()">{{ textoBoton() }}</button>
               </div>
             </div>
           </div>
@@ -172,7 +253,46 @@ const documentoValido = (control: AbstractControl): ValidationErrors | null => {
 
         <!-- 4. Listo -->
         @if (paso() === 'listo' && resumen(); as r) {
-         @if (r.estado === 'PAGADA') {
+         @if (r.estado === 'INICIADA' && r.descuentoHermano; as h) {
+          <div class="mel-exito" role="status">
+            <span class="mel-check" aria-hidden="true">✓</span>
+            <div><h2>¡Solicitud registrada! Tu descuento por hermano está en revisión</h2><p>{{ r.alumno }} · {{ r.grado }} · sección {{ r.seccion }} ({{ r.turno }}) · código <b>{{ r.codigo }}</b></p></div>
+          </div>
+          <div class="pub-dos mel-dos">
+            <div class="pub-tarjeta">
+              <h3>¿Qué sigue?</h3>
+              <ol class="mel-sigue">
+                <li class="hecho">Reservamos la vacante y registramos el documento de tu hermano ({{ h.documento }}).</li>
+                <li [class.ahora]="h.estado === 'EN_REVISION'" [class.hecho]="h.estado !== 'EN_REVISION'">La secretaría <b>confirma el parentesco de hermanos</b>, valida la matrícula y la deja en deuda para que caja la reciba.</li>
+                <li [class.ahora]="h.estado !== 'EN_REVISION'">Pagas la matrícula (S/ {{ r.montoMatricula | number: '1.2-2' }}{{ h.estado === 'EN_REVISION' ? ' o menos, con el descuento' : '' }}).</li>
+              </ol>
+              @switch (h.estado) {
+                @case ('EN_REVISION') {
+                  <div class="pub-ok"><b>Revisa tu cuenta de apoderado para hacer el pago</b> (te enviaremos al correo el usuario y la clave cuando la secretaría confirme) <b>o ve a caja</b> a pagar. Si pagas en caja, ahí mismo quedas matriculado.</div>
+                }
+                @case ('APROBADO') {
+                  <div class="pub-ok">✓ La secretaría confirmó el descuento «{{ h.descuento }}». <b>Ya puedes pagar desde tu cuenta de apoderado</b> (revisa tu correo: ahí está tu usuario y clave) <b>o en caja</b>, donde quedas matriculado al pagar.</div>
+                }
+                @default {
+                  <div class="mel-aviso">La secretaría no pudo confirmar el descuento{{ h.motivo ? ': ' + h.motivo : '' }}. Puedes pagar la matrícula completa desde tu cuenta de apoderado (revisa tu correo) o en caja.</div>
+                }
+              }
+              <div class="mel-acc">
+                <button type="button" class="pub-btn pub-btn-primario" [disabled]="actualizando()" (click)="actualizarEstado()">{{ actualizando() ? 'Consultando…' : 'Consultar estado' }}</button>
+                <a class="pub-btn pub-btn-borde" routerLink="/login">Ir al portal</a>
+                <button type="button" class="pub-btn pub-btn-borde" (click)="nuevaMatricula()">Hacer otra matrícula</button>
+              </div>
+            </div>
+            <div class="pub-tarjeta">
+              <h3>Tu solicitud</h3>
+              <div class="mel-cuenta"><span>Alumno</span><b>{{ r.alumno }}</b></div>
+              <div class="mel-cuenta"><span>Grado y sección</span><b>{{ r.grado }} · {{ r.seccion }}</b></div>
+              <div class="mel-cuenta"><span>Código</span><b>{{ r.codigo }}</b></div>
+              <div class="mel-cuenta"><span>Matrícula a pagar</span><b>S/ {{ r.montoMatricula | number: '1.2-2' }}</b></div>
+              <p class="muted" style="font-size: .85rem">Tu vacante queda reservada mientras se revisa.</p>
+            </div>
+          </div>
+         } @else if (r.estado === 'PAGADA') {
           <div class="mel-exito" role="status">
             <span class="mel-check" aria-hidden="true">✓</span>
             <div><h2>¡Pago recibido! Tu matrícula está en revisión</h2><p>{{ r.alumno }} · {{ r.grado }} · sección {{ r.seccion }} ({{ r.turno }}) · código <b>{{ r.codigo }}</b></p></div>
@@ -317,6 +437,26 @@ const documentoValido = (control: AbstractControl): ValidationErrors | null => {
     .mel-msg, .mel-error { color: #b42318; font-size: .85rem; }
     .mel-error { background: #fde3e0; padding: 10px 12px; border-radius: 10px; margin-top: 12px; }
     .mel-aviso { background: #fff1d6; color: #8a4b08; padding: 10px 12px; border-radius: 10px; margin: 10px 0; }
+    .mel-desc b, .mel-desc span { color: #1a7a3c; }
+    .mel-total { border-top: 1.5px solid #dfe5f2; margin-top: 4px; padding-top: 8px; font-size: 1.05rem; }
+    .mel-tachado { color: #7b8499; font-weight: 400; margin-right: 4px; }
+    .mel-codigo { margin: 14px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+    .mel-codigo label { font-weight: 700; font-size: .9rem; }
+    .mel-codigo-fila { display: flex; gap: 8px; }
+    .mel-codigo-fila .pub-input { flex: 1; min-width: 0; text-transform: uppercase; }
+    .mel-codigo-ok { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; background: #e8f6ee; color: #14532d; }
+    .mel-codigo-nota { margin: 0; font-size: .85rem; }
+    .mel-hermano { margin: 14px 0 4px; padding: 12px 14px; border: 1.5px solid #dfe5f2; border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .mel-hermano p { margin: 0; }
+    .mel-planes { margin: 14px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+    .mel-planes-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+    .mel-plan { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; border: 2px solid #dfe5f2; border-radius: 12px; background: #fff; font: inherit; cursor: pointer; }
+    .mel-plan:hover:not(:disabled) { border-color: var(--pc, #1f3a87); }
+    .mel-plan.sel { border-color: var(--pc, #1f3a87); box-shadow: 0 0 0 3px rgb(31 58 135 / .15); }
+    .mel-plan:disabled { cursor: default; }
+    .mel-plan small { color: #4b5875; }
+    .mel-plan-desc { align-self: flex-start; font-size: .75rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e8f6ee; color: #14532d; }
+    .mel-mini { padding: 4px 12px; font-size: .85rem; }
     .mel-trampa { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     .mel-dl { display: grid; gap: 8px; margin: 0 0 12px; }
     .mel-dl div { display: grid; gap: 2px; }
@@ -366,10 +506,65 @@ export class MatriculaEnLineaComponent implements OnInit {
   protected readonly errorPago = signal<string | null>(null);
   protected readonly descargando = signal(false);
 
+  // --- Código de descuento (opcional): se valida con el servidor y se aplica al reservar ---
+  protected readonly codigo = this.fb.nonNullable.control('');
+  protected readonly descuento = signal<DescuentoVista | null>(null);
+  protected readonly verificandoCodigo = signal(false);
+  protected readonly errorCodigo = signal<string | null>(null);
+  protected readonly textoValor = textoValor;
+  protected readonly textoAplica = textoAplica;
+
+  // --- Forma de pago de las pensiones: mensual, bimestral, semestral (5 %) o anual (10 %); los porcentajes los manda el servidor ---
+  protected readonly planElegido = signal<PlanPago>('MENSUAL');
+  protected readonly planes = computed(() => {
+    const pension = this.gradoActual()?.pension ?? null;
+    return (this.oferta()?.planes ?? []).map(p => ({
+      ...p,
+      ayuda: AYUDA_PLAN[p.id],
+      porcentaje: p.descuentoPorcentaje,
+      resumen: pension ? resumenDelPlan(pension.total, pension.cuotas, p.id, p.descuentoPorcentaje) : null
+    }));
+  });
+  protected readonly planActual = computed(() => this.planes().find(p => p.id === this.planElegido()) ?? null);
+
+  // --- Descuento por hermano matriculado: solo el documento del hermano. La secretaría busca al hermano y confirma el parentesco; hasta entonces no se
+  // paga (después se paga desde la cuenta del apoderado o en caja). Por eso hace falta el correo, donde llega el usuario y la clave. ---
+  protected readonly conHermano = signal(false);
+  protected readonly documentoHermano = this.fb.nonNullable.control('', [Validators.required, Validators.pattern(/^[A-Za-z0-9]{6,20}$/)]);
+  /** El estado de un control no es una señal: este valor se actualiza cuando cambia. */
+  private readonly documentoHermanoValido = signal(false);
+  private readonly correoEscrito = signal(false);
+  protected readonly hermanosDisponibles = computed<DescuentoHermanoOferta[]>(() => this.oferta()?.descuentosHermano ?? []);
+  protected readonly correoApoderado = computed(() => this.correoEscrito());
+  protected readonly documentoHermanoMalo = computed(() => this.conHermano() && !this.documentoHermanoValido() && this.documentoHermano.dirty);
+
+  /** Con descuento por hermano hacen falta el documento del hermano y el correo del apoderado antes de reservar. */
+  protected readonly botonBloqueado = computed(() => {
+    if (!this.acepto() || this.trabajando()) return true;
+    return this.conHermano() && !this.inicio() && !(this.documentoHermanoValido() && this.correoEscrito());
+  });
+  protected readonly textoBoton = computed(() => {
+    if (this.trabajando()) return 'Reservando…';
+    return this.conHermano() && !this.inicio() ? 'Reservar y pedir el descuento' : 'Pagar la matrícula';
+  });
+
+  protected alternarHermano(activo: boolean): void {
+    this.conHermano.set(activo);
+    if (!activo) this.documentoHermano.reset('');
+  }
+
+  /** Mientras se decide el descuento el monto cambia (al aprobarlo se recalcula): la pantalla debe mostrar el que se pagará de verdad. */
+  private sincronizarMonto(r: ResumenMatricula): void {
+    const i = this.inicio();
+    if (!i || r.montoMatricula === null || r.estado !== 'INICIADA') return;
+    this.inicio.set({ ...i, montoMatricula: r.montoMatricula, montoBase: i.montoBase ?? r.montoMatricula, descuento: Math.max(0, (i.montoBase ?? r.montoMatricula) - r.montoMatricula) });
+  }
+
   protected readonly form = this.fb.nonNullable.group({
     alumno: this.fb.nonNullable.group({
       tipoDocumento: 'DNI', numeroDocumento: ['', [Validators.required, documentoValido]], nombres: ['', [Validators.required, Validators.maxLength(100)]],
-      apellidoPaterno: ['', [Validators.required, Validators.maxLength(80)]], apellidoMaterno: [''], fechaNacimiento: ['', Validators.required], sexo: 'F'
+      apellidoPaterno: ['', [Validators.required, Validators.maxLength(80)]], apellidoMaterno: [''], fechaNacimiento: ['', Validators.required], sexo: 'F',
+      direccion: ['', Validators.maxLength(200)], distrito: ['', Validators.maxLength(80)], colegioProcedencia: ['', Validators.maxLength(150)], email: ['', Validators.email]
     }),
     apoderado: this.fb.nonNullable.group({
       tipoDocumento: 'DNI', numeroDocumento: ['', [Validators.required, documentoValido]], nombres: ['', [Validators.required, Validators.maxLength(100)]],
@@ -384,6 +579,43 @@ export class MatriculaEnLineaComponent implements OnInit {
   protected readonly indice = computed(() => this.pasos.findIndex(p => p.id === this.paso()));
   protected readonly gradosDelNivel = computed(() => this.oferta()?.niveles.find(n => n.id === this.nivelId())?.grados ?? []);
   protected readonly gradoActual = computed(() => this.oferta()?.niveles.flatMap(n => n.grados).find(g => g.id === this.gradoId()) ?? null);
+  /** Los costos del grado con el descuento aplicado (la misma cuenta que hace el servidor); ya reservada, la matrícula sale tal cual la calculó el servidor. */
+  protected readonly costos = computed(() => {
+    const g = this.gradoActual();
+    const c = costosConDescuento(g?.matricula ?? null, g?.pension ?? null, this.descuento());
+    const i = this.inicio();
+    if (i && c.matricula && i.montoBase !== undefined && i.descuento !== undefined) {
+      c.matricula = { base: i.montoBase, descuento: i.descuento, total: i.montoMatricula };
+    }
+    return c;
+  });
+
+  protected aplicarCodigo(): void {
+    const c = normalizarCodigo(this.codigo.value);
+    if (!c) { this.errorCodigo.set('Escribe tu código de descuento.'); return; }
+    if (!/^[A-Z0-9_-]{3,40}$/.test(c)) { this.errorCodigo.set('El código solo lleva letras, números y guiones.'); return; }
+    this.verificandoCodigo.set(true);
+    this.errorCodigo.set(null);
+    this.api.descuento(c).subscribe({
+      next: d => { this.verificandoCodigo.set(false); this.descuento.set(d); this.codigo.setValue(d.codigo); },
+      error: e => {
+        this.verificandoCodigo.set(false);
+        this.descuento.set(null);
+        this.errorCodigo.set(this.mensaje(e, 'No pudimos validar el código. Intenta de nuevo.'));
+      }
+    });
+  }
+
+  protected quitarCodigo(): void {
+    this.descuento.set(null);
+    this.codigo.setValue('');
+    this.errorCodigo.set(null);
+  }
+
+  constructor() {
+    this.documentoHermano.statusChanges.subscribe(() => this.documentoHermanoValido.set(this.documentoHermano.valid));
+    this.form.controls.apoderado.controls.email.valueChanges.subscribe(v => this.correoEscrito.set(!!v?.trim()));
+  }
 
   ngOnInit(): void {
     this.api.oferta().subscribe({
@@ -419,6 +651,9 @@ export class MatriculaEnLineaComponent implements OnInit {
     this.errorPago.set(null);
     this.modalPago.set(false);
     this.form.reset({ alumno: { tipoDocumento: 'DNI', sexo: 'F' }, apoderado: { tipoDocumento: 'DNI', parentesco: 'MADRE' }, sitio: '' });
+    this.quitarCodigo();
+    this.planElegido.set('MENSUAL');
+    this.alternarHermano(false);
     this.tarjeta.reset();
     this.paso.set('grado');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -456,21 +691,37 @@ export class MatriculaEnLineaComponent implements OnInit {
     this.error.set(null);
     this.api.iniciar({
       gradoId: this.gradoId(),
-      alumno: { ...v.alumno, numeroDocumento: v.alumno.numeroDocumento.trim() },
+      alumno: {
+        ...v.alumno, numeroDocumento: v.alumno.numeroDocumento.trim(), direccion: v.alumno.direccion.trim() || null, distrito: v.alumno.distrito.trim() || null,
+        colegioProcedencia: v.alumno.colegioProcedencia.trim() || null, email: v.alumno.email.trim() || null
+      },
       apoderado: { ...v.apoderado, numeroDocumento: v.apoderado.numeroDocumento.trim(), email: v.apoderado.email.trim() || null },
       acepto: this.acepto(),
-      sitio: v.sitio
+      sitio: v.sitio,
+      codigoDescuento: this.descuento()?.codigo ?? null,
+      planPago: this.planElegido(),
+      hermano: this.conHermano() ? { numeroDocumento: this.documentoHermano.value.trim() } : null
     }).subscribe({
       next: i => {
         this.trabajando.set(false);
         this.inicio.set(i);
         try { sessionStorage.setItem(CLAVE, JSON.stringify({ referencia: i.referencia, token: i.token })); } catch { /* sin almacenamiento: no se puede retomar */ }
-        this.abrirPago();
+        // Con descuento por hermano no se paga todavía: la secretaría confirma el parentesco y deja la matrícula lista para pagar
+        if (this.conHermano()) this.terminarPedidoHermano(i);
+        else this.abrirPago();
       },
       error: e => {
         this.trabajando.set(false);
         this.error.set(this.mensaje(e, 'No pudimos reservar la vacante. Intenta de nuevo.'));
       }
+    });
+  }
+
+  /** El pedido del hermano quedó registrado: se muestra el mensaje final (pagar desde la cuenta del apoderado o en caja cuando la secretaría confirme). */
+  private terminarPedidoHermano(i: InicioMatricula): void {
+    this.api.resumen(i.referencia, i.token).subscribe({
+      next: r => { this.resumen.set(r); this.paso.set('listo'); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+      error: () => this.error.set('Tu solicitud quedó registrada con el código ' + i.codigo + ', pero no pudimos mostrar el resultado. Guarda el código y consulta en secretaría.')
     });
   }
 
@@ -516,10 +767,11 @@ export class MatriculaEnLineaComponent implements OnInit {
     this.api.resumen(guardado.referencia, guardado.token).subscribe({
       next: r => {
         this.resumen.set(r);
-        if (r.estado !== 'INICIADA') {
+        if (r.estado !== 'INICIADA' || r.descuentoHermano) {
           this.paso.set('listo');
+          if (r.estado === 'INICIADA') this.inicio.set({ referencia: r.referencia, token: guardado!.token, codigo: r.codigo, alumno: r.alumno, grado: r.grado, seccion: r.seccion, turno: r.turno, montoMatricula: r.montoMatricula ?? 0, vencePago: null });
         } else {
-          this.inicio.set({ referencia: r.referencia, token: guardado!.token, codigo: r.codigo, alumno: r.alumno, grado: r.grado, seccion: r.seccion, turno: r.turno, montoMatricula: r.montoMatricula ?? 0, vencePago: null });
+          this.inicio.set({ referencia: r.referencia, token: guardado!.token, codigo: r.codigo, alumno: r.alumno, grado: r.grado, seccion: r.seccion, turno: r.turno, montoMatricula: r.montoMatricula ?? 0, vencePago: null, montoBase: r.montoMatricula ?? 0, descuento: 0 });
           this.paso.set('pago');
         }
       },
@@ -536,7 +788,7 @@ export class MatriculaEnLineaComponent implements OnInit {
     if (!r || !i) return;
     this.actualizando.set(true);
     this.api.resumen(r.referencia, i.token).subscribe({
-      next: nuevo => { this.resumen.set(nuevo); this.actualizando.set(false); },
+      next: nuevo => { this.resumen.set(nuevo); this.sincronizarMonto(nuevo); this.actualizando.set(false); },
       error: () => this.actualizando.set(false)
     });
   }
@@ -588,6 +840,11 @@ export class MatriculaEnLineaComponent implements OnInit {
   private mensaje(e: unknown, defecto: string): string {
     const h = e as HttpErrorResponse;
     const detalles = h?.error?.detalles;
+    // «Solicitud no válida» es el campo trampa anti-robots: si llegó con texto lo llenó el navegador (autocompletar), no la persona.
+    if ([h?.error?.mensaje, ...(Array.isArray(detalles) ? detalles : [])].some(t => typeof t === 'string' && t.includes('Solicitud no válida'))) {
+      this.form.controls.sitio.setValue('');
+      return 'No pudimos validar el envío de tus datos. Vuelve a intentarlo; si sigue igual, recarga la página.';
+    }
     if (Array.isArray(detalles) && detalles.length > 0) return detalles.slice(0, 3).join('. ') + '.';
     const m = h?.error?.mensaje;
     return typeof m === 'string' && m ? m : h?.status === 429 ? 'Demasiados intentos seguidos. Espera un momento e inténtalo de nuevo.' : defecto;

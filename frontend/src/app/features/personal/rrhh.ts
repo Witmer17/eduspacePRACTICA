@@ -209,21 +209,23 @@ function diasDeContratoEnMes(c: Contrato, desde: string, hasta: string): number 
 }
 
 /** Estado del pago de una persona en el mes. */
-export type EstadoPagoMes = 'sin-contrato' | 'sin-generar' | 'pendiente' | 'pagado';
+export type EstadoPagoMes = 'sin-contrato' | 'sin-generar' | 'pendiente' | 'por-aprobar' | 'pagado';
 
 export function estadoPagoMes(contrato: Contrato | undefined, pagos: readonly PagoPersonal[]): EstadoPagoMes {
   if (pagos.some(p => p.estado === 'PENDIENTE')) return 'pendiente';
+  // Caja ya registró el pago y el administrador aún no lo aprueba.
+  if (pagos.some(p => p.estado === 'POR_APROBAR')) return 'por-aprobar';
   if (pagos.some(p => p.concepto === 'SUELDO')) return 'pagado';
   if (!contrato) return pagos.length ? 'pagado' : 'sin-contrato';
   return 'sin-generar';
 }
 
 export const ETIQUETA_ESTADO_PAGO: Record<EstadoPagoMes, string> = {
-  'sin-contrato': 'Sin contrato', 'sin-generar': 'Sin generar', pendiente: 'Pendiente de pago', pagado: 'Pagado'
+  'sin-contrato': 'Sin contrato', 'sin-generar': 'Sin generar', pendiente: 'Pendiente de pago', 'por-aprobar': 'Por aprobar', pagado: 'Pagado'
 };
 
 export const CLASE_ESTADO_PAGO: Record<EstadoPagoMes, string> = {
-  'sin-contrato': 'badge-gray', 'sin-generar': 'badge-gray', pendiente: 'badge-warn', pagado: 'badge-ok'
+  'sin-contrato': 'badge-gray', 'sin-generar': 'badge-gray', pendiente: 'badge-warn', 'por-aprobar': 'badge-violet', pagado: 'badge-ok'
 };
 
 const dosDigitos = (n: number): string => String(n).padStart(2, '0');

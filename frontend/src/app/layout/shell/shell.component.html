@@ -45,8 +45,8 @@
       </div>
     </header>
     <main class="aula-main">
-      <div [class.con-menu]="!!hubActual()">
-        @if (hubActual(); as h) {
+      <div [class.con-menu]="!!menuVertical()">
+        @if (menuVertical(); as h) {
           <nav class="menu-v" [attr.aria-label]="h.hub.titulo">
             <div class="menu-v-titulo" [title]="h.hub.descripcion">{{ h.hub.titulo }}</div>
             @for (p of h.pestanas; track p.ruta; let i = $index) {
@@ -78,7 +78,10 @@
             }
           </nav>
         }
-        <div class="menu-v-contenido"><router-outlet /></div>
+        <div class="menu-v-contenido">
+          @if (sinPeriodo()) { <app-sin-periodo-activo /> }
+          <router-outlet />
+        </div>
       </div>
     </main>
   </div>
@@ -152,6 +155,7 @@
           </div>
         </nav>
       }
+      @if (sinPeriodo()) { <app-sin-periodo-activo /> }
       <router-outlet />
     </main>
   </div>

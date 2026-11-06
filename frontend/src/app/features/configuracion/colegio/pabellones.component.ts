@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Aula, Pabellon } from '../../../core/models/planificacion.model';
+import { Aula, Grado, Pabellon } from '../../../core/models/planificacion.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmService } from '../../../core/services/confirm.service';
 import { NotificationService } from '../../../core/services/notification.service';
@@ -31,6 +31,27 @@ export const cambiosCapacidad = (filas: readonly FilaCapacidad[]): { aulaId: num
 
 /** Alumnos que caben en total, según lo que se está escribiendo (las capacidades inválidas no suman). */
 export const totalCapacidad = (filas: readonly FilaCapacidad[]): number => filas.reduce((t, f) => t + (capacidadValida(f.capacidad) ? f.capacidad : 0), 0);
+
+/** Los grados agrupados por nivel (en el orden en que vienen), para elegirlos con casillas. */
+export function gradosPorNivel(grados: readonly Pick<Grado, 'id' | 'nivelId' | 'nivelNombre' | 'numero' | 'nombre'>[]): { nivelId: number; nivel: string; grados: typeof grados[number][] }[] {
+  const mapa = new Map<number, { nivelId: number; nivel: string; grados: typeof grados[number][] }>();
+  for (const g of [...grados].sort((a, b) => a.nivelId - b.nivelId || a.numero - b.numero)) {
+    if (!mapa.has(g.nivelId)) mapa.set(g.nivelId, { nivelId: g.nivelId, nivel: g.nivelNombre, grados: [] });
+    mapa.get(g.nivelId)!.grados.push(g);
+  }
+  return [...mapa.values()];
+}
+
+/** Marca o quita todos los `ids` de la selección (sin tocar los demás). */
+export function marcarGrupo(seleccion: ReadonlySet<number>, ids: readonly number[], marcar: boolean): Set<number> {
+  const s = new Set(seleccion);
+  for (const id of ids) marcar ? s.add(id) : s.delete(id);
+  return s;
+}
+
+/** ¿Cambió la selección respecto de lo guardado? */
+export const cambioSeleccion = (seleccion: ReadonlySet<number>, guardados: readonly number[]): boolean =>
+  seleccion.size !== guardados.length || guardados.some(id => !seleccion.has(id));
 
 /**
  * Cómo se verán los códigos de las aulas que se crean: «A-01, A-02…». `desde` es cuántas aulas ya tiene (para seguir la numeración).
@@ -79,6 +100,9 @@ export function ejemploCodigosDe(nombre: string, cantidad: number, desde = 0): s
               <span class="muted">{{ p.cantidadAulas }} {{ p.cantidadAulas === 1 ? 'aula' : 'aulas' }} · {{ p.aulasRegistradas }} registradas
                 @if (aulasLibres(p) > 0) { · faltan {{ aulasLibres(p) }} }</span>
               @if (p.aulasRegistradas > 0) { <span class="cap-total"><strong>{{ p.capacidadAlumnos }}</strong> alumnos de capacidad en total</span> }
+              <span class="grados-pab">
+                @if (nombresGrados(p).length) { <strong>Grados:</strong> {{ nombresGrados(p).join(' · ') }} } @else { <span class="muted">Sin grados elegidos</span> }
+              </span>
               <div class="barra" role="img" [attr.aria-label]="p.aulasRegistradas + ' de ' + p.cantidadAulas + ' aulas registradas'"><span [style.width.%]="avance(p)"></span></div>
             </div>
             @if (puedeEditar()) {
@@ -86,6 +110,7 @@ export function ejemploCodigosDe(nombre: string, cantidad: number, desde = 0): s
                 @if (aulasLibres(p) > 0) {
                   <button type="button" class="btn btn-sm btn-primary" (click)="abrirCrearAulas(p)">Crear {{ aulasLibres(p) === 1 ? 'el aula' : 'las ' + aulasLibres(p) + ' aulas' }}</button>
                 }
+                <button type="button" class="btn btn-sm" (click)="abrirGrados(p)">Grados del pabellón</button>
                 @if (p.aulasRegistradas > 0) {
                   <button type="button" class="btn btn-sm" (click)="abrirCapacidades(p)">Alumnos por aula</button>
                 }
@@ -99,6 +124,43 @@ export function ejemploCodigosDe(nombre: string, cantidad: number, desde = 0): s
         }
       </div>
     </section>
+
+    <!-- Qué grados usan el pabellón: se marcan con casillas, por nivel o todos de una vez -->
+    @if (paraGrados(); as p) {
+      <app-modal [titulo]="'Grados del pabellón ' + p.nombre" [ancho]="560" (cerrar)="paraGrados.set(null)">
+        <p style="margin: 0 0 12px">Marca los grados que usan este pabellón. Al armar las secciones de un grado, sus aulas se buscan primero en su pabellón.</p>
+        @if (!gruposGrados().length) {
+          <p class="muted">Aún no hay grados ofrecidos: elígelos en Configuración → Niveles y grados.</p>
+        } @else {
+          <div class="aplicar-todas">
+            <strong>{{ gradosSel().size }}</strong> de {{ totalGrados() }} grados
+            <button type="button" class="btn btn-sm" (click)="marcarTodosGrados(true)">Marcar todos</button>
+            <button type="button" class="btn btn-sm" (click)="marcarTodosGrados(false)">Quitar todos</button>
+          </div>
+          @for (n of gruposGrados(); track n.nivelId) {
+            <fieldset class="nivel-grados">
+              <legend>{{ n.nivel }}
+                <button type="button" class="enlace" (click)="marcarNivelGrados(n.nivelId, true)">todos</button>
+                <button type="button" class="enlace" (click)="marcarNivelGrados(n.nivelId, false)">ninguno</button>
+              </legend>
+              <div class="casillas-grados">
+                @for (g of n.grados; track g.id) {
+                  <label class="casilla-grado" [class.on]="gradosSel().has(g.id)">
+                    <input type="checkbox" [checked]="gradosSel().has(g.id)" (change)="alternarGradoSel(g.id)" [attr.aria-label]="g.nombre + ' en el pabellón ' + p.nombre" />
+                    {{ g.nombre }}
+                  </label>
+                }
+              </div>
+            </fieldset>
+          }
+        }
+        @if (errorForm()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorForm() }}</div> }
+        <ng-container footer>
+          <button type="button" class="btn" (click)="paraGrados.set(null)">Cancelar</button>
+          <button type="button" class="btn btn-primary" [disabled]="guardando() || !hayCambioGrados()" (click)="guardarGrados()">{{ guardando() ? 'Guardando…' : 'Guardar grados' }}</button>
+        </ng-container>
+      </app-modal>
+    }
 
     <!-- Cuántos alumnos caben en cada aula del pabellón -->
     @if (paraCapacidad(); as p) {
@@ -188,6 +250,14 @@ export function ejemploCodigosDe(nombre: string, cantidad: number, desde = 0): s
     }
   `,
   styles: `
+    .grados-pab { font-size: .8rem; color: var(--ink-2); }
+    .nivel-grados { margin: 0 0 10px; padding: 8px 12px 10px; border: 1px solid var(--line); border-radius: 12px; }
+    .nivel-grados legend { padding: 0 6px; font-weight: 800; font-size: .82rem; color: var(--nivel); }
+    .nivel-grados .enlace { margin-left: 8px; border: 0; background: none; padding: 0; font: inherit; font-size: .75rem; font-weight: 600; color: var(--nivel); cursor: pointer; text-decoration: underline; }
+    .casillas-grados { display: flex; flex-wrap: wrap; gap: 8px; }
+    .casilla-grado { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1.5px solid var(--line-2); border-radius: 999px; cursor: pointer; font-weight: 600; font-size: .86rem; }
+    .casilla-grado.on { border-color: var(--nivel); background: var(--nivel-suave); }
+    .casilla-grado input { accent-color: var(--nivel); }
     .pab { margin-top: 16px; }
     .cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
     .cab h2 { margin: 0; }
@@ -249,6 +319,56 @@ export class PabellonesComponent implements OnInit {
     crearAulas: [true],
     capacidadAulas: [30, [Validators.min(1), Validators.max(500)]]
   });
+
+  // --- Grados que usan cada pabellón ---
+  private readonly grados = signal<Grado[]>([]);
+  protected readonly paraGrados = signal<Pabellon | null>(null);
+  protected readonly gradosSel = signal<ReadonlySet<number>>(new Set());
+  protected readonly gruposGrados = computed(() => gradosPorNivel(this.grados()));
+  protected readonly totalGrados = computed(() => this.grados().length);
+  protected readonly hayCambioGrados = computed(() => { const p = this.paraGrados(); return !!p && cambioSeleccion(this.gradosSel(), p.gradoIds ?? []); });
+
+  protected nombresGrados(p: Pabellon): string[] {
+    const ids = new Set(p.gradoIds ?? []);
+    return this.grados().filter(g => ids.has(g.id)).sort((a, b) => a.nivelId - b.nivelId || a.numero - b.numero).map(g => g.nombre);
+  }
+
+  protected abrirGrados(p: Pabellon): void {
+    this.errorForm.set(null);
+    this.gradosSel.set(new Set(p.gradoIds ?? []));
+    this.paraGrados.set(p);
+  }
+
+  protected alternarGradoSel(id: number): void {
+    this.gradosSel.update(s => marcarGrupo(s, [id], !s.has(id)));
+  }
+
+  protected marcarNivelGrados(nivelId: number, marcar: boolean): void {
+    this.gradosSel.update(s => marcarGrupo(s, this.grados().filter(g => g.nivelId === nivelId).map(g => g.id), marcar));
+  }
+
+  protected marcarTodosGrados(marcar: boolean): void {
+    this.gradosSel.set(marcarGrupo(this.gradosSel(), this.grados().map(g => g.id), marcar));
+  }
+
+  protected guardarGrados(): void {
+    const p = this.paraGrados();
+    if (!p || !this.hayCambioGrados()) return;
+    this.guardando.set(true);
+    this.errorForm.set(null);
+    this.api.fijarGradosPabellon(p.id, [...this.gradosSel()]).subscribe({
+      next: r => {
+        this.guardando.set(false);
+        this.paraGrados.set(null);
+        this.avisos.success(`Pabellón ${r.nombre}: ${r.gradoIds.length} ${r.gradoIds.length === 1 ? 'grado' : 'grados'}.`);
+        this.cargar();
+      },
+      error: err => {
+        this.guardando.set(false);
+        this.errorForm.set(mensajeError(err));
+      }
+    });
+  }
 
   // --- Alumnos que caben en cada aula del pabellón ---
   protected readonly paraCapacidad = signal<Pabellon | null>(null);
@@ -316,6 +436,8 @@ export class PabellonesComponent implements OnInit {
 
   ngOnInit(): void {
     this.cargar();
+    // Los grados que ofrece el colegio, para poder elegirlos en cada pabellón.
+    this.api.grados().subscribe({ next: g => this.grados.set(g.filter(x => x.activo !== false)), error: () => undefined });
   }
 
   private cargar(): void {

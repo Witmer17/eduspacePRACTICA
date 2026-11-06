@@ -13,6 +13,13 @@ import { Campania, Cupo, Matricula } from '../../core/models/matricula.model';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { AulasPanelComponent } from './aulas-panel.component';
 import { CursosDocentesComponent } from './cursos-docentes.component';
+import { MatriculaInicioComponent } from './matricula-inicio.component';
+import { PagosPorAprobarComponent } from '../personal/pagos-por-aprobar.component';
+import { SolicitudesDescuentoComponent } from '../matriculas/solicitudes-descuento.component';
+import { PorAprobarInicioComponent } from './por-aprobar-inicio.component';
+import { hoyLocal } from '../personal/asistencia-personal';
+import { fechaCorta } from '../personal/rrhh';
+import { situacionDelPeriodo, textoDias } from './periodo-actual';
 
 /** Un indicador que falla no debe tumbar el resto de la pantalla: su valor queda en `null` (se muestra "—"). */
 const seguro = <T>(obs: Observable<T>): Observable<T | null> => obs.pipe(catchError(() => of(null)));
@@ -80,9 +87,26 @@ export const ACCESOS: Acceso[] = [
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, PageHeaderComponent, AulasPanelComponent, CursosDocentesComponent],
+  imports: [RouterLink, PageHeaderComponent, AulasPanelComponent, CursosDocentesComponent, MatriculaInicioComponent, PorAprobarInicioComponent, PagosPorAprobarComponent, SolicitudesDescuentoComponent],
   templateUrl: './dashboard.component.html',
   styles: `
+    .card-periodo { position: relative; border-left: 5px solid var(--primary); }
+    .card-periodo.alerta { border-left-color: var(--warn); }
+    .card-periodo.vacio { border-left-color: var(--danger, #c0392b); }
+    .periodo-cab { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .periodo-acciones { display: flex; gap: 8px; flex-wrap: wrap; }
+    .periodo-cuerpo { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 20px; align-items: center; margin-top: 14px; }
+    .periodo-nombre { margin: 0; font-size: 1.6rem; letter-spacing: -.02em; }
+    .periodo-fechas { margin: 2px 0 10px; color: var(--ink-2); }
+    .periodo-barra { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+    .periodo-barra span { display: block; height: 100%; border-radius: 999px; background: var(--primary); }
+    .periodo-barra.alerta span { background: var(--warn); }
+    .periodo-dias { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 18px; border-radius: 16px; background: var(--primary-soft); color: var(--primary); }
+    .periodo-dias.alerta { background: var(--warn-soft); color: var(--warn); }
+    .periodo-dias strong { font-size: 2.2rem; line-height: 1; font-variant-numeric: tabular-nums; }
+    .periodo-dias span { font-size: .85rem; font-weight: 700; }
+    .periodo-pie { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; color: var(--ink-2); font-size: .88rem; }
+    @media (max-width: 760px) { .periodo-cuerpo { grid-template-columns: minmax(0, 1fr); } }
     .card-personal {
       position: relative;
     }
@@ -196,6 +220,8 @@ export class DashboardComponent implements OnInit {
   private readonly asistencia = inject(AsistenciaService);
 
   protected readonly esAdmin = this.auth.isAdmin;
+  /** Confirmar (aprobar o rechazar) las matrículas pagadas: administración y secretaría. */
+  protected readonly puedeAprobar = computed(() => this.auth.tieneAlgunRol(['ADMIN', 'SECRETARIA']));
   protected readonly nombre = this.auth.currentUser;
   protected readonly cargando = signal(true);
 
@@ -321,8 +347,26 @@ export class DashboardComponent implements OnInit {
    */
   protected readonly mostrarPanel = false;
 
+  // --- Periodo académico: en cuál estamos, cuánto le queda y el acceso a crear uno nuevo ---
+  protected readonly cargandoPeriodo = signal(true);
+  private readonly anioInicio = signal<Anio | null>(null);
+  private readonly periodosInicio = signal<Periodo[]>([]);
+  protected readonly situacion = computed(() => situacionDelPeriodo(this.anioInicio(), this.periodosInicio(), hoyLocal()));
+  protected readonly anioDelInicio = this.anioInicio.asReadonly();
+  protected readonly textoDias = textoDias;
+  protected readonly fechaCorta = fechaCorta;
+
+  private cargarPeriodo(): void {
+    seguro(this.plan.anioActivo()).subscribe(anio => {
+      this.anioInicio.set(anio);
+      if (!anio) { this.cargandoPeriodo.set(false); return; }
+      seguro(this.plan.periodos(anio.id)).subscribe(p => { this.periodosInicio.set(p ?? []); this.cargandoPeriodo.set(false); });
+    });
+  }
+
   ngOnInit(): void {
     this.cargarPersonal();
+    this.cargarPeriodo();
     if (!this.mostrarPanel) {
       this.cargando.set(false);
       return;

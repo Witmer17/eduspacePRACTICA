@@ -13,13 +13,15 @@ export class NombresAlumnoService {
     return this.mapaSignal()[id] ?? `Alumno ${id}`;
   }
 
+  /** Pide en un solo viaje los nombres que aún no se conocen (lotes de hasta 200). */
   cargar(ids: number[]): void {
-    for (const id of new Set(ids)) {
-      if (this.pedidos.has(id)) continue;
-      this.pedidos.add(id);
-      this.api.obtener(id).subscribe({
-        next: a => this.mapaSignal.update(m => ({ ...m, [id]: a.nombreCompleto })),
-        error: () => this.pedidos.delete(id)
+    const nuevos = [...new Set(ids)].filter(id => !this.pedidos.has(id));
+    for (let i = 0; i < nuevos.length; i += 200) {
+      const lote = nuevos.slice(i, i + 200);
+      lote.forEach(id => this.pedidos.add(id));
+      this.api.resumenes(lote).subscribe({
+        next: lista => this.mapaSignal.update(m => ({ ...m, ...Object.fromEntries(lista.map(a => [a.id, a.nombreCompleto])) })),
+        error: () => lote.forEach(id => this.pedidos.delete(id))
       });
     }
   }

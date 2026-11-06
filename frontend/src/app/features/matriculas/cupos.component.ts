@@ -39,7 +39,7 @@ export class CuposComponent implements OnInit {
     this.plan.aulas().subscribe(a => this.aulas.set(a));
     this.plan.anios().subscribe(a => {
       this.anios.set(a);
-      this.filtro.patchValue({ anioId: (a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0 });
+      this.filtro.patchValue({ anioId: a.find(x => x.estado === 'ACTIVO')?.id ?? 0 });
       this.cargar();
     });
   }

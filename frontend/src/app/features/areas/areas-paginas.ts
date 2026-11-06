@@ -65,7 +65,7 @@ export function funcionesDe(codigo: string): readonly string[] {
 export const ACCESOS: Readonly<Record<string, readonly Acceso[]>> = {
   DIRECCION: [
     { etiqueta: 'Panel del administrador', ruta: '/inicio', roles: PERSONAL, ayuda: 'Estadísticas, pre-matrículas y aulas.' },
-    { etiqueta: 'Matrículas por aprobar', ruta: '/matriculas/aprobaciones', roles: ['ADMIN'], ayuda: 'Aprobar o rechazar matrículas.' },
+    { etiqueta: 'Matrículas por aprobar', ruta: '/matriculas/aprobaciones', roles: PERSONAL, ayuda: 'Aprobar o rechazar matrículas.' },
     { etiqueta: 'Finanzas', ruta: '/finanzas', roles: PERSONAL, ayuda: 'Resumen de cobranza y morosos.' },
     { etiqueta: 'Pago al personal', ruta: '/personal/pagos', roles: ['ADMIN'], ayuda: 'Contratos, planilla y depósitos.' }
   ],

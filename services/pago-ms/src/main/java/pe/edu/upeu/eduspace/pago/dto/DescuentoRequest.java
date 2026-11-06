@@ -25,5 +25,8 @@ public class DescuentoRequest {
     private String aplicaA = "PENSION";
 
     private Boolean activo = true;
+
+    @Pattern(regexp = "|[A-Za-z0-9_-]{3,40}", message = "El código lleva de 3 a 40 letras, números, guion o guion bajo (sin espacios)")
+    private String codigo;
 }
 

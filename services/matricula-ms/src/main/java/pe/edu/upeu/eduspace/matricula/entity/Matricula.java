@@ -50,6 +50,11 @@ public class Matricula {
     @Column(nullable = false, length = 15)
     private String estado = "PRE_MATRICULA";
 
+    /** Forma de pago de las pensiones acordada al matricular (MENSUAL, BIMESTRAL, SEMESTRAL o ANUAL). */
+    @Builder.Default
+    @Column(name = "plan_pago", nullable = false, length = 12)
+    private String planPago = "MENSUAL";
+
     @Column(name = "matricula_anterior_id")
     private Long matriculaAnteriorId;
 

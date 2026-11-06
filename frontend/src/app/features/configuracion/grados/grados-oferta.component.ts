@@ -58,6 +58,45 @@ export function opcionesAula(
 
 export const MAX_SECCIONES = 8;
 
+/** Una fila de la tabla «Seleccionar todos»: un grado con la cantidad de secciones que se le va a crear. */
+export interface FilaTodos {
+  clave: string;
+  nivelCodigo: string;
+  numero: number;
+  nombre: string;
+  nivel: string;
+  /** Ya tiene secciones o cursos: no se toca. */
+  fija: boolean;
+  detalle: string;
+  incluir: boolean;
+  secciones: number;
+  turno: Turno;
+  capacidad: number;
+}
+
+/** Las filas de la tabla: todos los grados marcados de entrada (menos los fijos), con lo que ya se había establecido o los valores por defecto. */
+export function filasParaTodos(oferta: readonly GradoOferta[], elegidos: ReadonlySet<string>, configs: Readonly<Record<string, ConfigGrado>>): FilaTodos[] {
+  return oferta.map(g => {
+    const k = clave(g);
+    const c = configs[k];
+    const fija = g.enUso && elegidos.has(k);
+    return {
+      clave: k, nivelCodigo: g.nivelCodigo, numero: g.numero, nombre: g.nombre, nivel: g.nivelNombre, fija, detalle: g.detalleUso ?? '',
+      incluir: !fija, secciones: c?.secciones ?? 1, turno: c?.turno ?? 'MANANA', capacidad: c?.capacidad ?? capacidadSugerida(g.nivelCodigo)
+    };
+  });
+}
+
+/** ¿Los números de la fila sirven? (secciones de 0 a {@link MAX_SECCIONES}, vacantes de 1 a 60). */
+export const filaValida = (f: Pick<FilaTodos, 'secciones' | 'capacidad'>): boolean =>
+  Number.isInteger(f.secciones) && f.secciones >= 0 && f.secciones <= MAX_SECCIONES && Number.isInteger(f.capacidad) && f.capacidad >= 1 && f.capacidad <= 60;
+
+/** Cuántos grados se aplican, cuántas secciones nuevas y cuántas vacantes sumarán (solo las filas marcadas y no fijas). */
+export function totalesTodos(filas: readonly FilaTodos[]): { grados: number; secciones: number; vacantes: number } {
+  const marcadas = filas.filter(f => f.incluir && !f.fija && filaValida(f));
+  return { grados: filas.filter(f => f.incluir && !f.fija).length, secciones: marcadas.reduce((t, f) => t + f.secciones, 0), vacantes: marcadas.reduce((t, f) => t + f.secciones * f.capacidad, 0) };
+}
+
 /** Nombres de las secciones de un grado: A, B, C… (hasta {@link MAX_SECCIONES}). */
 export const nombresSecciones = (cantidad: number): string[] =>
   Array.from({ length: Math.min(Math.max(Math.trunc(cantidad) || 0, 0), MAX_SECCIONES) }, (_, i) => String.fromCharCode(65 + i));
@@ -102,8 +141,9 @@ export function resumenConfig(c: Pick<ConfigGrado, 'secciones' | 'turno' | 'capa
       <app-config-hero titulo="Niveles y grados" subtitulo="Elige los grados que ofrece el colegio. Al elegir uno nuevo se establece con sus secciones. Los que ya tienen secciones o cursos no se pueden quitar."
                        icono="M3 21h18M6 21V10l6-5 6 5v11M10 21v-6h4v6">
         @if (puedeEditar()) {
+          <button type="button" class="btn" [disabled]="bloqueado() || guardando()" (click)="abrirTodos()" title="Elige todos los grados de una vez y asigna cuántas secciones tendrá cada uno">Seleccionar todos…</button>
           <button type="button" class="btn" [disabled]="!hayCambios() || guardando()" (click)="deshacer()">Deshacer</button>
-          <button type="button" class="btn btn-primary" [disabled]="!hayCambios() || guardando() || elegidos().size === 0" (click)="guardar()">
+          <button type="button" class="btn btn-primary" [disabled]="bloqueado() || !hayCambios() || guardando() || elegidos().size === 0" (click)="guardar()">
             {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
           </button>
         }
@@ -113,8 +153,16 @@ export function resumenConfig(c: Pick<ConfigGrado, 'secciones' | 'turno' | 'capa
         <div class="aviso aviso-warn">Solo el administrador puede modificar los grados; tú puedes consultarlos.</div>
       }
 
+      <!-- Sin periodo activo, todos los grados salen desactivados: para activarlos primero se inicia un periodo nuevo -->
+      @if (bloqueado()) {
+        <div class="aviso aviso-warn sin-periodo-grados" role="status">
+          <div><strong>No hay un periodo activo.</strong> Por eso todos los niveles y grados aparecen desactivados. Para activarlos, primero inicia un nuevo periodo: el asistente de apertura te deja elegir los grados y sus secciones.</div>
+          @if (puedeEditar()) { <a class="btn btn-sm btn-primary" routerLink="/apertura" [queryParams]="{ asistente: 1 }">Iniciar nuevo periodo</a> }
+        </div>
+      }
+
       <div class="resumen">
-        <strong>{{ elegidos().size }}</strong> de {{ oferta().length }} grados elegidos
+        <strong>{{ contados() }}</strong> de {{ oferta().length }} grados elegidos
         @if (hayCambios()) { <span class="badge badge-warn">Cambios sin guardar</span> }
         @if (cargando()) { <span class="muted">Cargando…</span> }
       </div>
@@ -127,7 +175,7 @@ export function resumenConfig(c: Pick<ConfigGrado, 'secciones' | 'turno' | 'capa
               <h2>{{ n.nombre }}</h2>
               <span class="cuenta">{{ n.elegidos }} de {{ n.grados.length }}</span>
             </div>
-            @if (puedeEditar()) {
+            @if (puedeEditar() && !bloqueado()) {
               <div class="atajos">
                 <button type="button" class="enlace" (click)="marcarNivel(n.codigo, true)">Elegir todos</button>
                 <button type="button" class="enlace" (click)="marcarNivel(n.codigo, false)">Quitar los libres</button>
@@ -136,13 +184,14 @@ export function resumenConfig(c: Pick<ConfigGrado, 'secciones' | 'turno' | 'capa
             <div class="tiles" role="group" [attr.aria-label]="'Grados de ' + n.nombre">
               @for (g of n.grados; track g.numero) {
                 <button type="button" class="tile" role="checkbox" [class.on]="estaElegido(g)" [class.fijo]="g.enUso && estaElegido(g)"
-                        [attr.aria-checked]="estaElegido(g)" [disabled]="!puedeEditar() || (g.enUso && estaElegido(g))" (click)="alternar(g)">
+                        [attr.aria-checked]="estaElegido(g)" [disabled]="bloqueado() || !puedeEditar() || (g.enUso && estaElegido(g))" (click)="alternar(g)">
                   <span class="emblema" aria-hidden="true">{{ emblema(g) }}</span>
                   <span class="texto">
                     <strong>{{ g.nombre }}</strong>
                     @if (g.enUso && g.detalleUso) { <small>En uso: {{ g.detalleUso }}</small> }
                     @else if (configDe(g); as c) { <small class="nuevo">{{ resumen(c, aulas()) }}</small> }
                     @else if (estaElegido(g) && !g.gradoId) { <small>Se creará al guardar</small> }
+                    @else if (bloqueado()) { <small>Desactivado: sin periodo activo</small> }
                     @else if (!estaElegido(g) && puedeEditar()) { <small>Toca para establecerlo</small> }
                   </span>
                   <span class="marca" aria-hidden="true">@if (g.enUso && estaElegido(g)) { 🔒 } @else if (estaElegido(g)) { ✓ }</span>
@@ -153,6 +202,52 @@ export function resumenConfig(c: Pick<ConfigGrado, 'secciones' | 'turno' | 'capa
         }
       </div>
     </div>
+
+    <!-- Seleccionar todos los grados de una vez, con la cantidad de secciones de cada uno en una tabla -->
+    @if (todosAbierto()) {
+      <app-modal titulo="Seleccionar todos los grados" [ancho]="820" (cerrar)="todosAbierto.set(false)">
+        <p style="margin: 0 0 12px">Marca los grados que se ofrecen y escribe cuántas secciones tendrá cada uno (se nombran A, B, C…). Las aulas se asignan después, en Estructura académica. Los grados que ya tienen secciones o cursos quedan fijos.</p>
+        <div class="aplicar-todos">
+          <strong>Para todos los marcados:</strong>
+          <label>Secciones <input type="number" min="0" [max]="maxSecciones" [value]="masivo().secciones" (input)="cambiarMasivo('secciones', +$any($event.target).value)" aria-label="Secciones para todos" /></label>
+          <label>Turno
+            <select [value]="masivo().turno" (change)="cambiarMasivo('turno', $any($event.target).value)" aria-label="Turno para todos"><option value="MANANA">Mañana</option><option value="TARDE">Tarde</option></select>
+          </label>
+          <label>Vacantes <input type="number" min="1" max="60" [value]="masivo().capacidad" (input)="cambiarMasivo('capacidad', +$any($event.target).value)" aria-label="Vacantes para todos" /></label>
+          <button type="button" class="btn btn-sm" (click)="aplicarMasivo()">Aplicar a los marcados</button>
+        </div>
+        <div class="tabla-todos-wrap">
+          <table class="tabla-todos">
+            <thead>
+              <tr>
+                <th><input type="checkbox" [checked]="todasMarcadas()" (change)="marcarTodasFilas($any($event.target).checked)" aria-label="Marcar todos los grados" /></th>
+                <th>Grado</th><th>Secciones</th><th>Turno</th><th>Vacantes</th><th>Vacantes en total</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (f of filasTodos(); track f.clave) {
+                <tr [class.fija]="f.fija" [class.apagada]="!f.incluir">
+                  <td><input type="checkbox" [checked]="f.incluir" [disabled]="f.fija" (change)="cambiarFila(f.clave, { incluir: $any($event.target).checked })" [attr.aria-label]="'Incluir ' + f.nombre" /></td>
+                  <td><strong>{{ f.nombre }}</strong> <small class="muted">{{ f.nivel }}</small>@if (f.fija) { <small class="muted"> · ya establecido {{ f.detalle ? '(' + f.detalle + ')' : '' }}</small> }</td>
+                  <td><input type="number" min="0" [max]="maxSecciones" [value]="f.secciones" [disabled]="f.fija || !f.incluir" (input)="cambiarFila(f.clave, { secciones: +$any($event.target).value })" [attr.aria-label]="'Secciones de ' + f.nombre" /></td>
+                  <td>
+                    <select [value]="f.turno" [disabled]="f.fija || !f.incluir" (change)="cambiarFila(f.clave, { turno: $any($event.target).value })" [attr.aria-label]="'Turno de ' + f.nombre"><option value="MANANA">Mañana</option><option value="TARDE">Tarde</option></select>
+                  </td>
+                  <td><input type="number" min="1" max="60" [value]="f.capacidad" [disabled]="f.fija || !f.incluir" (input)="cambiarFila(f.clave, { capacidad: +$any($event.target).value })" [attr.aria-label]="'Vacantes de ' + f.nombre" /></td>
+                  <td class="num">{{ f.fija || !f.incluir ? '—' : f.secciones * f.capacidad }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <p class="resumen-todos"><strong>{{ marcadasTodos() }}</strong> grados · <strong>{{ seccionesTodos() }}</strong> secciones · <strong>{{ vacantesTodos() }}</strong> vacantes</p>
+        @if (hayInvalidasTodos()) { <div class="aviso aviso-danger" role="alert">Revisa los números: las secciones van de 0 a {{ maxSecciones }} y las vacantes de 1 a 60.</div> }
+        <ng-container footer>
+          <button type="button" class="btn" (click)="todosAbierto.set(false)">Cancelar</button>
+          <button type="button" class="btn btn-primary" [disabled]="hayInvalidasTodos()" (click)="aceptarTodos()">Aplicar a {{ marcadasTodos() }} {{ marcadasTodos() === 1 ? 'grado' : 'grados' }}</button>
+        </ng-container>
+      </app-modal>
+    }
 
     <!-- Establecer un grado nuevo: secciones, turno y vacantes -->
     @if (modal(); as g) {
@@ -241,6 +336,21 @@ export function resumenConfig(c: Pick<ConfigGrado, 'secciones' | 'turno' | 'capa
     }
   `,
   styles: `
+    .sin-periodo-grados { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .tile:disabled:not(.on) { opacity: .6; }
+    .aplicar-todos { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px; background: var(--nivel-suave); font-size: .85rem; }
+    .aplicar-todos label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+    .aplicar-todos input { width: 72px; }
+    .tabla-todos-wrap { max-height: 48vh; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+    .tabla-todos { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    .tabla-todos th { position: sticky; top: 0; background: var(--card); text-align: left; padding: 8px 10px; font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); border-bottom: 1px solid var(--line); }
+    .tabla-todos td { padding: 6px 10px; border-top: 1px solid var(--line); }
+    .tabla-todos td input[type=number] { width: 70px; }
+    .tabla-todos td small { margin-left: 6px; }
+    .tabla-todos tr.fija { background: var(--bg); }
+    .tabla-todos tr.apagada td:not(:first-child):not(:nth-child(2)) { opacity: .5; }
+    .tabla-todos .num { text-align: right; font-weight: 700; }
+    .resumen-todos { margin: 10px 0 0; }
     .resumen { display: flex; align-items: center; gap: 12px; font-size: .95rem; }
     .resumen strong { font-size: 1.4rem; }
     .niveles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
@@ -293,6 +403,69 @@ export class GradosOfertaComponent implements OnInit {
   protected readonly elegidos = signal<ReadonlySet<string>>(new Set());
   private readonly original = signal<ReadonlySet<string>>(new Set());
   protected readonly anioActivo = signal<Anio | null>(null);
+  /** Ya se consultaron los años (para no avisar «sin periodo activo» antes de saberlo). */
+  private readonly periodoListo = signal(false);
+  /** Sin periodo activo, los niveles y grados salen desactivados y no se pueden activar: antes hay que iniciar un periodo nuevo. */
+  protected readonly bloqueado = computed(() => this.periodoListo() && !this.anioActivo());
+  /** Cuántos grados se ven elegidos (con el bloqueo, ninguno). */
+  protected readonly contados = computed(() => (this.bloqueado() ? 0 : this.elegidos().size));
+
+  // --- Seleccionar todos con una tabla ---
+  protected readonly todosAbierto = signal(false);
+  protected readonly filasTodos = signal<FilaTodos[]>([]);
+  protected readonly masivo = signal<{ secciones: number; turno: Turno; capacidad: number }>({ secciones: 1, turno: 'MANANA', capacidad: 30 });
+  protected readonly todasMarcadas = computed(() => { const l = this.filasTodos().filter(f => !f.fija); return l.length > 0 && l.every(f => f.incluir); });
+  protected readonly marcadasTodos = computed(() => totalesTodos(this.filasTodos()).grados);
+  protected readonly seccionesTodos = computed(() => totalesTodos(this.filasTodos()).secciones);
+  protected readonly vacantesTodos = computed(() => totalesTodos(this.filasTodos()).vacantes);
+  protected readonly hayInvalidasTodos = computed(() => this.filasTodos().some(f => f.incluir && !f.fija && !filaValida(f)));
+
+  protected abrirTodos(): void {
+    if (this.bloqueado()) return;
+    this.filasTodos.set(filasParaTodos(this.oferta(), this.elegidos(), this.configs()));
+    this.masivo.set({ secciones: 1, turno: 'MANANA', capacidad: 30 });
+    this.todosAbierto.set(true);
+  }
+
+  protected cambiarMasivo(campo: 'secciones' | 'turno' | 'capacidad', valor: number | string): void {
+    this.masivo.update(m => ({ ...m, [campo]: valor }));
+  }
+
+  /** Copia los valores de arriba a todas las filas marcadas. */
+  protected aplicarMasivo(): void {
+    const m = this.masivo();
+    this.filasTodos.update(l => l.map(f => (f.incluir && !f.fija ? { ...f, secciones: m.secciones, turno: m.turno, capacidad: m.capacidad } : f)));
+  }
+
+  protected cambiarFila(clave: string, parche: Partial<FilaTodos>): void {
+    this.filasTodos.update(l => l.map(f => (f.clave === clave ? { ...f, ...parche } : f)));
+  }
+
+  protected marcarTodasFilas(marcar: boolean): void {
+    this.filasTodos.update(l => l.map(f => (f.fija ? f : { ...f, incluir: marcar })));
+  }
+
+  /** Deja elegidos los grados marcados con lo que se escribió en la tabla (se crean al «Guardar cambios») y quita los desmarcados que aún no existían. */
+  protected aceptarTodos(): void {
+    if (this.hayInvalidasTodos()) return;
+    const s = new Set(this.elegidos());
+    const c = { ...this.configs() };
+    for (const f of this.filasTodos()) {
+      if (f.fija) continue;
+      if (f.incluir) {
+        s.add(f.clave);
+        c[f.clave] = { secciones: f.secciones, turno: f.turno, capacidad: f.capacidad, aulas: c[f.clave]?.aulas?.slice(0, f.secciones) ?? [] };
+      } else {
+        s.delete(f.clave);
+        delete c[f.clave];
+      }
+    }
+    this.elegidos.set(s);
+    this.configs.set(c);
+    this.todosAbierto.set(false);
+    const t = totalesTodos(this.filasTodos());
+    this.avisos.info(`${t.grados} ${t.grados === 1 ? 'grado marcado' : 'grados marcados'} con ${t.secciones} ${t.secciones === 1 ? 'sección' : 'secciones'}: pulsa «Guardar cambios» para crearlos.`);
+  }
 
   /** Cómo se establecerá cada grado nuevo elegido (secciones, turno y vacantes), por clave de grado. */
   private readonly configs = signal<Record<string, ConfigGrado>>({});
@@ -347,7 +520,7 @@ export class GradosOfertaComponent implements OnInit {
       if (!porNivel.has(g.nivelCodigo)) porNivel.set(g.nivelCodigo, { codigo: g.nivelCodigo, nombre: g.nivelNombre, clase: claseNivel(g.nivelCodigo), grados: [] });
       porNivel.get(g.nivelCodigo)!.grados.push(g);
     }
-    return [...porNivel.values()].map(n => ({ ...n, elegidos: n.grados.filter(g => this.elegidos().has(clave(g))).length }));
+    return [...porNivel.values()].map(n => ({ ...n, elegidos: n.grados.filter(g => this.estaElegido(g)).length }));
   });
 
   constructor() {
@@ -361,9 +534,11 @@ export class GradosOfertaComponent implements OnInit {
     this.cargar();
     this.api.aulas().pipe(catchError(() => of([] as Aula[]))).subscribe(a => this.aulas.set(a));
     this.api.pabellones().pipe(catchError(() => of([] as Pabellon[]))).subscribe(p => this.pabellones.set(p));
-    this.api.anios().pipe(catchError(() => of([] as Anio[]))).subscribe(a => {
+    this.api.anios().pipe(catchError(() => of(null))).subscribe(a => {
+      if (!a) return; // sin poder consultar los años no se bloquea nada
       const activo = a.find(x => x.estado === 'ACTIVO') ?? null;
       this.anioActivo.set(activo);
+      this.periodoListo.set(true);
       if (activo) this.api.secciones(activo.id).pipe(catchError(() => of([] as Seccion[]))).subscribe(s => this.seccionesAnio.set(s));
     });
   }
@@ -377,6 +552,13 @@ export class GradosOfertaComponent implements OnInit {
       propias: this.aulasModal().filter((_, j) => j !== i),
       actual: this.aulasModal()[i] ?? 0
     });
+  }
+
+  /** El pabellón del grado (el que se le asignó en Datos del colegio → Pabellones), cuando tiene exactamente uno; si no, 0 (todos). */
+  private pabellonDelGrado(g: GradoOferta): number {
+    if (!g.gradoId) return 0;
+    const propios = this.pabellones().filter(p => (p.gradoIds ?? []).includes(g.gradoId!));
+    return propios.length === 1 ? propios[0].id : 0;
   }
 
   protected nombrePabellon(id: number): string {
@@ -435,7 +617,7 @@ export class GradosOfertaComponent implements OnInit {
   }
 
   protected estaElegido(g: GradoOferta): boolean {
-    return this.elegidos().has(clave(g));
+    return !this.bloqueado() && this.elegidos().has(clave(g));
   }
 
   protected configDe(g: GradoOferta): ConfigGrado | null {
@@ -461,8 +643,9 @@ export class GradosOfertaComponent implements OnInit {
     const previa = this.configDe(g) ?? { secciones: 1, turno: 'MANANA' as Turno, capacidad: capacidadSugerida(g.nivelCodigo), aulas: [] };
     this.modal.set(g);
     this.aulasModal.set([...previa.aulas]);
-    // El filtro de pabellón de cada sección arranca en el pabellón de su aula, si ya tenía una.
-    this.pabModal.set(previa.aulas.map(id => this.aulas().find(a => a.id === id)?.pabellonId ?? 0));
+    // El filtro de pabellón de cada sección arranca en el pabellón de su aula, si ya tenía una; si no, en el pabellón del grado (si tiene uno solo).
+    const delGrado = this.pabellonDelGrado(g);
+    this.pabModal.set(nombresSecciones(previa.secciones).map((_, i) => this.aulas().find(a => a.id === previa.aulas[i])?.pabellonId ?? delGrado));
     this.form.reset({ secciones: previa.secciones, turno: previa.turno, capacidad: previa.capacidad });
     this.formValores.set({ secciones: previa.secciones, turno: previa.turno, capacidad: previa.capacidad });
   }

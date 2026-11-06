@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Bloque, Turno } from '../../../core/models/planificacion.model';
+import { forkJoin } from 'rxjs';
+import { Bloque, BloqueRequest, Turno } from '../../../core/models/planificacion.model';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfirmService } from '../../../core/services/confirm.service';
 import { NotificationService } from '../../../core/services/notification.service';
@@ -38,6 +39,92 @@ export class BloquesComponent implements OnInit {
     horaFin: ['08:45', Validators.required],
     esReceso: [false]
   });
+
+  // ---------------------------------------------------------- asistente de franjas
+  protected readonly gen = this.fb.nonNullable.group({
+    turno: ['MANANA' as Turno, Validators.required],
+    inicio: ['08:00', Validators.required],
+    duracion: [45, [Validators.required, Validators.min(10), Validators.max(120)]],
+    hasta: ['12:00', Validators.required],
+    recesoCada: [0, [Validators.min(0), Validators.max(10)]],
+    recesoMin: [15, [Validators.min(5), Validators.max(60)]]
+  });
+  protected readonly generando = signal(false);
+  protected readonly errorGen = signal<string | null>(null);
+
+  /** Franjas que se crearían con los datos del asistente (la última clase no pasa de «hasta»). Se recalcula en cada cambio del formulario. */
+  protected propuesta(): BloqueRequest[] {
+    const v = this.gen.getRawValue();
+    const ini = this.aMinutos(v.inicio);
+    const fin = this.aMinutos(v.hasta);
+    const out: BloqueRequest[] = [];
+    if (v.inicio === '' || v.hasta === '' || fin <= ini || v.duracion < 10) return out;
+    let cursor = ini;
+    let clases = 0;
+    let orden = 1;
+    while (cursor + v.duracion <= fin) {
+      out.push({ turno: v.turno, orden: orden++, horaInicio: this.aHora(cursor), horaFin: this.aHora(cursor + v.duracion), esReceso: false });
+      cursor += v.duracion;
+      clases++;
+      if (v.recesoCada > 0 && clases % v.recesoCada === 0 && cursor + v.recesoMin <= fin) {
+        out.push({ turno: v.turno, orden: orden++, horaInicio: this.aHora(cursor), horaFin: this.aHora(cursor + v.recesoMin), esReceso: true });
+        cursor += v.recesoMin;
+      }
+    }
+    return out;
+  }
+
+  /** El asistente solo crea franjas en un turno que todavía no tenga bloques (los que ya se usan en horarios no se pueden borrar). */
+  protected turnoConBloques(): boolean {
+    return this.bloques().some(b => b.turno === this.gen.controls.turno.value);
+  }
+
+  protected generarFranjas(): void {
+    this.errorGen.set(null);
+    if (this.gen.invalid) {
+      this.gen.markAllAsTouched();
+      this.errorGen.set('Revisa la duración (10 a 120 min) y las horas.');
+      return;
+    }
+    const v = this.gen.getRawValue();
+    if (this.aMinutos(v.hasta) <= this.aMinutos(v.inicio)) {
+      this.errorGen.set('La hora límite debe ser posterior a la de inicio.');
+      return;
+    }
+    const franjas = this.propuesta();
+    if (franjas.length === 0) {
+      this.errorGen.set('Con esa duración no entra ninguna clase antes de la hora límite.');
+      return;
+    }
+    if (this.turnoConBloques()) {
+      this.errorGen.set('Ese turno ya tiene bloques. Elimina los que no se usen o edítalos uno por uno.');
+      return;
+    }
+    this.generando.set(true);
+    forkJoin(franjas.map(b => this.api.crearBloque(b))).subscribe({
+      next: () => {
+        this.generando.set(false);
+        this.avisos.success(`Se crearon ${franjas.length} franjas.`);
+        this.cargar();
+      },
+      error: e => {
+        this.generando.set(false);
+        this.errorGen.set(mensajeError(e, 'No se pudieron crear las franjas.'));
+        this.cargar();
+      }
+    });
+  }
+
+  private aMinutos(h: string): number {
+    const [hh, mm] = h.split(':').map(Number);
+    return (hh || 0) * 60 + (mm || 0);
+  }
+
+  private aHora(min: number): string {
+    const hh = Math.floor(min / 60).toString().padStart(2, '0');
+    const mm = (min % 60).toString().padStart(2, '0');
+    return `${hh}:${mm}:00`;
+  }
 
   ngOnInit(): void {
     this.cargar();

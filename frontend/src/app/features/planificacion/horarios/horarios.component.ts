@@ -82,7 +82,7 @@ export class HorariosComponent implements OnInit {
     this.api.aulas().subscribe(a => this.aulas.set(a.filter(x => x.activo)));
     this.api.anios().subscribe(a => {
       this.anios.set(a);
-      this.anioId.setValue((a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0);
+      this.anioId.setValue(a.find(x => x.estado === 'ACTIVO')?.id ?? 0);
       this.cargarSecciones();
     });
   }

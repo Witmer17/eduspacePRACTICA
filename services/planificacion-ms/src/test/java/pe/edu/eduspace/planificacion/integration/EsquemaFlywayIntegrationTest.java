@@ -16,7 +16,7 @@ class EsquemaFlywayIntegrationTest extends PostgresIntegrationTestBase {
     @Autowired JdbcTemplate jdbc;
 
     @Test
-    void flywayCreaLas23TablasYLaSemilla() {
+    void flywayCreaLas24TablasYLaSemilla() {
         List<String> tablas = jdbc.queryForList("""
                 select table_name from information_schema.tables
                 where table_schema = 'public' and table_name <> 'flyway_schema_history' order by 1
@@ -24,7 +24,7 @@ class EsquemaFlywayIntegrationTest extends PostgresIntegrationTestBase {
         assertThat(tablas).containsExactlyInAnyOrder("anios_academicos", "periodos", "niveles", "grados", "aulas",
                 "secciones", "cursos", "grado_cursos", "docentes", "asignaciones", "bloques_horarios", "horarios",
                 "publicaciones_horario", "feriados", "outbox_eventos", "areas", "colegio", "pabellones", "docente_cursos",
-                "contratos_personal", "pagos_personal", "asistencia_personal", "cuentas_deposito_personal");
+                "contratos_personal", "pagos_personal", "asistencia_personal", "cuentas_deposito_personal", "pabellon_grados");
         assertThat(jdbc.queryForObject("select count(*) from niveles", Integer.class)).isEqualTo(3);
         assertThat(jdbc.queryForObject("select count(*) from grados", Integer.class)).isEqualTo(14);
     }

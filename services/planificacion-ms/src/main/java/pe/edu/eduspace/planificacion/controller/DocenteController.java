@@ -39,10 +39,14 @@ public class DocenteController {
     public PageResponse<DocenteResponse> buscar(@RequestParam(required = false) String q,
                                                 @RequestParam(required = false) Long areaId,
                                                 @RequestParam(defaultValue = "false") boolean todas,
+                                                @RequestParam(required = false) String estado,
                                                 @RequestParam(defaultValue = "0") int page,
                                                 @RequestParam(defaultValue = "20") int size) {
         int tamano = Math.min(Math.max(size, 1), 100);
-        return service.buscar(q, areaId, todas, PageRequest.of(Math.max(page, 0), tamano, Sort.by("apellidos", "nombres")));
+        // estado: ACTIVO o INACTIVO; vacío o TODOS = sin filtro
+        var filtro = estado == null || estado.isBlank() || estado.equalsIgnoreCase("TODOS") ? null
+                : pe.edu.eduspace.planificacion.entity.EstadoDocente.valueOf(estado.toUpperCase());
+        return service.buscar(q, areaId, todas, filtro, PageRequest.of(Math.max(page, 0), tamano, Sort.by("apellidos", "nombres")));
     }
 
     @GetMapping("/{id}")

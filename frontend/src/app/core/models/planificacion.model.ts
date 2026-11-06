@@ -90,6 +90,8 @@ export interface Pabellon {
   aulasRegistradas: number;
   /** Alumnos que caben en total en las aulas del pabellón. */
   capacidadAlumnos: number;
+  /** Los grados que usan este pabellón. */
+  gradoIds: number[];
 }
 export type PabellonRequest = Pick<Pabellon, 'nombre' | 'cantidadAulas'>;
 

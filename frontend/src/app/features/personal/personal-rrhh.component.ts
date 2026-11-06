@@ -211,27 +211,6 @@ import {
           </form>
         }
 
-        @if (pagando(); as p) {
-          <div class="caja">
-            <strong>Marcar como pagado: {{ etiquetaConcepto(p) }} de {{ nombrePeriodo(p.periodo) }} ({{ dinero(p.monto) }})</strong>
-            <div class="form-grid" style="margin-top: 8px">
-              <div class="field"><label for="g-fecha">Fecha</label><input id="g-fecha" type="date" [formControl]="fechaPago" /></div>
-              <div class="field">
-                <label for="g-medio">Medio</label>
-                <select id="g-medio" [formControl]="medioPago">
-                  <option value="TRANSFERENCIA">Transferencia</option><option value="EFECTIVO">Efectivo</option>
-                  <option value="CHEQUE">Cheque</option><option value="YAPE_PLIN">Yape / Plin</option>
-                </select>
-              </div>
-              <div class="field full"><label for="g-ref">N.º de operación o referencia</label><input id="g-ref" [formControl]="referenciaPago" maxlength="100" /></div>
-            </div>
-            <div class="acciones-form">
-              <button type="button" class="btn btn-sm" (click)="pagando.set(null)">Cancelar</button>
-              <button type="button" class="btn btn-primary btn-sm" [disabled]="guardando()" (click)="confirmarPago(p)">Confirmar pago</button>
-            </div>
-          </div>
-        }
-
         <div class="table-wrap">
           <table class="table">
             <thead><tr><th>Periodo</th><th>Concepto</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
@@ -242,12 +221,12 @@ import {
                   <td>{{ etiquetaConcepto(p) }}@if (p.descripcion) { <div class="muted">{{ p.descripcion }}</div> }</td>
                   <td [class.neg]="p.montoFirmado < 0">{{ dinero(p.montoFirmado) }}</td>
                   <td>
-                    <span [class]="'badge ' + (p.estado === 'PAGADO' ? 'badge-ok' : 'badge-warn')">{{ p.estado === 'PAGADO' ? 'Pagado' : 'Pendiente' }}</span>
+                    <span [class]="'badge ' + (p.estado === 'PAGADO' ? 'badge-ok' : p.estado === 'POR_APROBAR' ? 'badge-violet' : 'badge-warn')">{{ p.estado === 'PAGADO' ? 'Pagado' : p.estado === 'POR_APROBAR' ? 'Por aprobar' : 'Pendiente' }}</span>
                     @if (p.fechaPago) { <div class="muted">{{ p.fechaPago }}{{ p.medio ? ' · ' + p.medio : '' }}</div> }
+                    @if (p.estado === 'PENDIENTE' && p.motivoRechazo) { <div class="muted" style="color: var(--danger)">Rechazado: {{ p.motivoRechazo }}</div> }
                   </td>
                   <td class="acciones">
                     @if (p.estado === 'PENDIENTE') {
-                      <button type="button" class="btn btn-sm" (click)="pedirPago(p)">Pagar</button>
                       <button type="button" class="btn btn-sm" (click)="eliminarPago(p)">Quitar</button>
                     }
                   </td>
@@ -428,10 +407,6 @@ export class PersonalRrhhComponent implements OnInit {
   // --- Pagos ---
   protected readonly formPagoAbierto = signal(false);
   protected readonly errorPago = signal<string | null>(null);
-  protected readonly pagando = signal<PagoPersonal | null>(null);
-  protected readonly fechaPago = this.fb.nonNullable.control('');
-  protected readonly medioPago = this.fb.nonNullable.control('TRANSFERENCIA');
-  protected readonly referenciaPago = this.fb.nonNullable.control('');
   protected readonly formPago = this.fb.nonNullable.group({
     periodo: [periodoDe(new Date()), Validators.required],
     concepto: ['BONO' as PagoPersonal['concepto'], Validators.required],
@@ -728,7 +703,6 @@ export class PersonalRrhhComponent implements OnInit {
   // ---------- Pagos ----------
   protected nuevoPago(): void {
     this.errorPago.set(null);
-    this.pagando.set(null);
     const vigente = this.contratos().find(c => c.estadoEfectivo === 'VIGENTE' || c.estadoEfectivo === 'POR_VENCER');
     this.formPago.reset({ periodo: periodoDe(new Date()), concepto: vigente ? 'SUELDO' : 'BONO', monto: vigente?.remuneracion ?? 0, descripcion: '' });
     this.formPagoAbierto.set(true);
@@ -749,22 +723,6 @@ export class PersonalRrhhComponent implements OnInit {
     }).subscribe({
       next: () => { this.guardando.set(false); this.formPagoAbierto.set(false); this.avisos.success('Pago registrado.'); this.recargar(); },
       error: err => { this.guardando.set(false); this.errorPago.set(mensajeError(err)); }
-    });
-  }
-
-  protected pedirPago(p: PagoPersonal): void {
-    this.formPagoAbierto.set(false);
-    this.fechaPago.setValue(hoyLocal());
-    this.medioPago.setValue('TRANSFERENCIA');
-    this.referenciaPago.setValue('');
-    this.pagando.set(p);
-  }
-
-  protected confirmarPago(p: PagoPersonal): void {
-    this.guardando.set(true);
-    this.api.pagar(p.id, { fechaPago: this.fechaPago.value || undefined, medio: this.medioPago.value, referencia: this.referenciaPago.value.trim() || undefined }).subscribe({
-      next: () => { this.guardando.set(false); this.pagando.set(null); this.avisos.success('Pago marcado como realizado.'); this.recargar(); },
-      error: err => { this.guardando.set(false); this.avisos.error(mensajeError(err)); }
     });
   }
 

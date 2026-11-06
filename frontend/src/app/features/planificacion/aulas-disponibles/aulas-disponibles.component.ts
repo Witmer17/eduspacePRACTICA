@@ -203,7 +203,7 @@ export class AulasDisponiblesComponent implements OnInit {
   ngOnInit(): void {
     this.api.anios().subscribe(anios => {
       this.anios.set(anios);
-      this.anio.set(anios.find(a => a.estado === 'ACTIVO') ?? anios[0] ?? null);
+      this.anio.set(anios.find(a => a.estado === 'ACTIVO') ?? null);
       this.cargar();
     });
   }
@@ -218,8 +218,9 @@ export class AulasDisponiblesComponent implements OnInit {
     const a = this.anio();
     this.cargando.set(true);
     forkJoin({
-      aulas: this.api.aulas().pipe(catchError(() => of([] as Aula[]))),
-      bloques: this.api.bloques().pipe(catchError(() => of([] as Bloque[]))),
+      // Sin periodo activo no hay horarios que mirar: la lista queda vacía.
+      aulas: a ? this.api.aulas().pipe(catchError(() => of([] as Aula[]))) : of([] as Aula[]),
+      bloques: a ? this.api.bloques().pipe(catchError(() => of([] as Bloque[]))) : of([] as Bloque[]),
       clases: a ? this.api.horariosAnio(a.id).pipe(catchError(() => of([] as ClaseHorario[]))) : of([] as ClaseHorario[]),
       secciones: a ? this.api.secciones(a.id).pipe(catchError(() => of([] as Seccion[]))) : of([] as Seccion[])
     }).subscribe(r => {

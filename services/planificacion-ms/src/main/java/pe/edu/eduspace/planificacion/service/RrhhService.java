@@ -204,22 +204,76 @@ public class RrhhService {
         return PagoResponse.de(pagos.save(p));
     }
 
+    /**
+     * Los pagos al personal ya no se marcan como pagados directamente: caja los SOLICITA ({@link #solicitar}) y el administrador los
+     * APRUEBA ({@link #aprobar}). Se conserva el endpoint para dar un mensaje claro a quien aún lo use.
+     */
     public PagoResponse pagar(Long id, PagarRequest r) {
+        throw new BusinessRuleException("Los pagos al personal los registra caja y los aprueba el administrador: apruébalo desde «Por aprobar».");
+    }
+
+    /** Caja registra cómo se pagó (medio, fecha, referencia). El pago queda POR_APROBAR hasta que el administrador lo apruebe. */
+    public PagoResponse solicitar(Long id, PagarRequest r, Long cajeroUsuarioId) {
         PagoPersonal p = pago(id);
-        if (PagoPersonal.PAGADO.equals(p.getEstado())) {
-            throw new BusinessRuleException("Este pago ya está marcado como pagado");
+        if (!PagoPersonal.PENDIENTE.equals(p.getEstado())) {
+            throw new BusinessRuleException(PagoPersonal.PAGADO.equals(p.getEstado())
+                    ? "Este pago ya está pagado" : "Este pago ya espera la aprobación del administrador");
         }
-        p.setEstado(PagoPersonal.PAGADO);
+        if (r.medio() == null || r.medio().isBlank()) {
+            throw new BusinessRuleException("Indica el medio con el que se paga");
+        }
+        p.setEstado(PagoPersonal.POR_APROBAR);
         p.setFechaPago(r.fechaPago() == null ? LocalDate.now() : r.fechaPago());
         p.setMedio(r.medio());
         p.setReferencia(r.referencia());
+        p.setSolicitadoPor(cajeroUsuarioId);
+        p.setSolicitadoEn(java.time.LocalDateTime.now());
+        p.setMotivoRechazo(null);
         return PagoResponse.de(pagos.save(p));
+    }
+
+    /** El administrador aprueba: el pago pasa a PAGADO. */
+    public PagoResponse aprobar(Long id, Long adminUsuarioId) {
+        PagoPersonal p = pago(id);
+        if (!PagoPersonal.POR_APROBAR.equals(p.getEstado())) {
+            throw new BusinessRuleException("Este pago no está esperando aprobación");
+        }
+        p.setEstado(PagoPersonal.PAGADO);
+        p.setAprobadoPor(adminUsuarioId);
+        p.setAprobadoEn(java.time.LocalDateTime.now());
+        return PagoResponse.de(pagos.save(p));
+    }
+
+    /** El administrador rechaza: vuelve a PENDIENTE y caja ve el motivo para corregirlo o volver a solicitarlo. */
+    public PagoResponse rechazar(Long id, String motivo, Long adminUsuarioId) {
+        PagoPersonal p = pago(id);
+        if (!PagoPersonal.POR_APROBAR.equals(p.getEstado())) {
+            throw new BusinessRuleException("Este pago no está esperando aprobación");
+        }
+        p.setEstado(PagoPersonal.PENDIENTE);
+        p.setMotivoRechazo(motivo);
+        p.setAprobadoPor(adminUsuarioId);
+        p.setAprobadoEn(java.time.LocalDateTime.now());
+        p.setFechaPago(null);
+        p.setMedio(null);
+        p.setReferencia(null);
+        return PagoResponse.de(pagos.save(p));
+    }
+
+    @Transactional(readOnly = true)
+    public List<PagoResponse> porAprobar() {
+        return pagos.findByEstadoOrderBySolicitadoEnAscIdAsc(PagoPersonal.POR_APROBAR).stream().map(PagoResponse::de).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public long contarPorAprobar() {
+        return pagos.countByEstado(PagoPersonal.POR_APROBAR);
     }
 
     public void eliminarPago(Long id) {
         PagoPersonal p = pago(id);
-        if (PagoPersonal.PAGADO.equals(p.getEstado())) {
-            throw new BusinessRuleException("Un pago ya realizado no se elimina");
+        if (!PagoPersonal.PENDIENTE.equals(p.getEstado())) {
+            throw new BusinessRuleException("Solo se elimina un pago pendiente: este ya está por aprobar o pagado");
         }
         pagos.delete(p);
     }

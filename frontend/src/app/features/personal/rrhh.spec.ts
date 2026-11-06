@@ -165,6 +165,17 @@ describe('tarjetas de pago del mes', () => {
     expect(estadoPagoMes(k, [pago('SUELDO', 'PAGADO')])).toBe('pagado');
   });
 
+  it('un pago que caja ya registró espera al administrador: «por aprobar», no «pagado» ni «pendiente»', () => {
+    const k = c(1, '2026-01-01', undefined);
+    expect(estadoPagoMes(k, [pago('SUELDO', 'POR_APROBAR')])).toBe('por-aprobar');
+    // si queda algo sin registrar, sigue pendiente de pago
+    expect(estadoPagoMes(k, [pago('SUELDO', 'POR_APROBAR'), pago('BONO', 'PENDIENTE', 50)])).toBe('pendiente');
+    // lo que espera aprobación todavía cuenta como por pagar en los totales
+    const t = totalesPlanilla([pago('SUELDO', 'PAGADO', 1000), pago('BONO', 'POR_APROBAR', 200)]);
+    expect(t.pagado).toBe(1000);
+    expect(t.pendiente).toBe(200);
+  });
+
 });
 
 describe('atajos de fechas del contrato', () => {

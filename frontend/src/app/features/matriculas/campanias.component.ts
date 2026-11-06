@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Campania, EstadoCampania } from '../../core/models/matricula.model';
 import { Anio } from '../../core/models/planificacion.model';
@@ -25,6 +26,7 @@ export class CampaniasComponent implements OnInit {
   private readonly avisos = inject(NotificationService);
   private readonly confirmacion = inject(ConfirmService);
   private readonly fb = inject(FormBuilder);
+  private readonly ruta = inject(ActivatedRoute, { optional: true });
 
   /** Crear, abrir y cerrar campañas es solo del ADMIN; la secretaria las consulta. */
   protected readonly esAdmin = inject(AuthService).isAdmin;
@@ -47,7 +49,9 @@ export class CampaniasComponent implements OnInit {
   ngOnInit(): void {
     this.plan.anios().subscribe(a => {
       this.anios.set(a);
-      this.anioId.setValue((a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0);
+      // ?anioId= (botón «Campaña de matrícula» de Años y periodos) abre las campañas de ESE año; si no, las del año activo.
+      const pedido = Number(this.ruta?.snapshot.queryParamMap.get('anioId'));
+      this.anioId.setValue(a.find(x => x.id === pedido)?.id ?? a.find(x => x.estado === 'ACTIVO')?.id ?? 0);
       this.cargar();
     });
   }

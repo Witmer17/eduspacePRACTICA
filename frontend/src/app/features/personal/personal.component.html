@@ -3,6 +3,11 @@
 
   <!-- Área, búsqueda y botón en la misma línea -->
   <form class="toolbar linea-personal" (submit)="$event.preventDefault(); buscar()">
+    <select class="input" [formControl]="estadoFiltro" (change)="buscar()" aria-label="Filtrar por estado">
+      <option value="ACTIVO">Activos</option>
+      <option value="INACTIVO">Inactivos (dados de baja)</option>
+      <option value="TODOS">Todos</option>
+    </select>
     <select class="input area-sel" [formControl]="areaFiltro" aria-label="Filtrar por área">
       <option [ngValue]="0">Todas las áreas</option>
       @for (a of areas(); track a.id) {
@@ -172,7 +177,7 @@
 }
 
 @if (abierto()) {
-  <app-modal [titulo]="paso() === 'contrato' ? 'Contrato de ' + (personaContrato()?.nombres ?? '') + ' ' + (personaContrato()?.apellidos ?? '') : paso() === 'cursos' ? 'Cursos de ' + (personaContrato()?.nombres ?? '') + ' ' + (personaContrato()?.apellidos ?? '') : editando() ? 'Editar personal' : 'Agregar personal'" [ancho]="paso() === 'datos' ? 760 : 900" (cerrar)="cerrar()">
+  <app-modal [titulo]="paso() === 'contrato' ? 'Contrato de ' + (personaContrato()?.nombres ?? '') + ' ' + (personaContrato()?.apellidos ?? '') : paso() === 'deposito' ? 'Cuenta de depósito de ' + (personaContrato()?.nombres ?? '') + ' ' + (personaContrato()?.apellidos ?? '') : paso() === 'cursos' ? 'Cursos de ' + (personaContrato()?.nombres ?? '') + ' ' + (personaContrato()?.apellidos ?? '') : editando() ? 'Editar personal' : 'Agregar personal'" [ancho]="paso() === 'datos' ? 760 : 900" (cerrar)="cerrar()">
     @if (pasosFlujo().length > 1) {
       <!-- Pasos: datos de la persona → contrato (administrador) → cursos (docentes) -->
       <ol class="pasos" aria-label="Pasos">
@@ -235,40 +240,20 @@
           <label for="p-tel">Teléfono</label>
           <input id="p-tel" formControlName="telefono" />
         </div>
-        <!-- Lo propio del área: Docencia elige los cursos que podrá dictar -->
+        <!-- Lo propio del área: Docencia. Los cursos NO se eligen aquí (se eligen una sola vez, por sección, en el paso «Cursos»). -->
         @if (esDocencia()) {
-          <h3 class="sec-form">Cursos que dictará</h3>
-          <section class="bloque-cursos field full" aria-label="Cursos que dictará">
-            <div class="cab">
-              <h4>Elige uno o varios cursos</h4>
-              <span class="muted">{{ cursosElegidos().size }} {{ cursosElegidos().size === 1 ? 'elegido' : 'elegidos' }}</span>
-            </div>
-            <div class="niveles" role="group" aria-label="Filtrar cursos por nivel">
-              <button type="button" class="chip-nivel" [class.on]="!nivelCurso()" (click)="nivelCurso.set(null)">Todos</button>
-              @for (n of nivelesCurso; track n.codigo) {
-                <button type="button" class="chip-nivel" [class.on]="nivelCurso() === n.codigo" (click)="nivelCurso.set(n.codigo)">{{ n.nombre }}</button>
-              }
-            </div>
-            <div class="lista-cursos">
-              @for (f of fichasVisibles(); track f.clave) {
-                <label class="curso" [class.on]="cursosElegidos().has(f.clave)" [title]="tituloCob(f)">
-                  <input type="checkbox" [checked]="cursosElegidos().has(f.clave)" (change)="alternarCurso(f, $any($event.target).checked)" />
-                  <span class="nombre"><strong>{{ f.nombre }}</strong><small>{{ f.area }}</small></span>
-                  <span [class]="'cob ' + cobDe(f).estado">{{ etiquetaCob(cobDe(f).estado) }}</span>
-                </label>
-              }
-            </div>
-            @if (sinDocenteCount() > 0) {
-              <span class="muted">{{ sinDocenteCount() }} {{ sinDocenteCount() === 1 ? 'curso aún no tiene' : 'cursos aún no tienen' }} docente: salen primero.</span>
+          <h3 class="sec-form">Docente</h3>
+          <div class="field full">
+            <label for="p-esp">Especialidad o título (opcional)</label>
+            <input id="p-esp" formControlName="especialidad" placeholder="Si lo dejas vacío se arma con los cursos que se le asignen" />
+          </div>
+          <div class="field full">
+            @if (editando() && cursosDeLaPersona().length) {
+              <span class="muted"><strong>Cursos que dicta:</strong> {{ cursosDeLaPersona().join(', ') }}. Para cambiarlos usa «{{ etiquetaSiguiente() }}» y asígnalos por sección en el paso «Cursos».</span>
+            } @else {
+              <span class="muted">Sus cursos se eligen en el paso «Cursos», por sección, después de guardar. Con «Guardar» a secas queda sin cursos y se le asignan luego en Cursos y docentes.</span>
             }
-            @if (!cursosElegidos().size && !editando()) {
-              <div class="aviso aviso-warn">Elige al menos un curso: con eso se le proponen secciones al armar los horarios.</div>
-            }
-            <div class="field">
-              <label for="p-esp">Especialidad o título (opcional)</label>
-              <input id="p-esp" formControlName="especialidad" placeholder="Si lo dejas vacío se arma con los cursos elegidos" />
-            </div>
-          </section>
+          </div>
         }
 
         <!-- Cuenta de acceso al sistema: opcional, solo el administrador la crea -->
@@ -341,15 +326,11 @@
             </div>
           </div>
 
-          <h3 class="sec-form">Sueldo y cargo</h3>
+          <h3 class="sec-form">Sueldo</h3>
           <div class="form-grid">
             <div class="field">
               <label for="ct-rem">Sueldo mensual (S/)</label>
               <input id="ct-rem" type="number" min="0" step="0.01" formControlName="remuneracion" />
-            </div>
-            <div class="field">
-              <label for="ct-cargo">Cargo del contrato</label>
-              <input id="ct-cargo" formControlName="cargo" maxlength="100" [placeholder]="persona?.cargo || 'Cargo'" />
             </div>
             <div class="field full">
               <label for="ct-obs">Observaciones (opcional)</label>
@@ -375,14 +356,53 @@
         </aside>
       </div>
       @if (errorContrato()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorContrato() }}</div> }
+    } @else if (paso() === 'deposito') {
+      <!-- Paso de la cuenta donde se le deposita el sueldo -->
+      @let persona = personaContrato();
+      <p class="persona-paso"><strong>{{ persona?.nombres }} {{ persona?.apellidos }}</strong> · ¿En qué cuenta se le deposita el sueldo?</p>
+      @if (cuentasExistentes().length) {
+        <div class="aviso aviso-ok" role="status">Ya tiene {{ cuentasExistentes().length }} {{ cuentasExistentes().length === 1 ? 'cuenta registrada' : 'cuentas registradas' }}: la nueva se suma como secundaria. Puedes omitir este paso.</div>
+      }
+      <form [formGroup]="formCuenta" (ngSubmit)="guardarCuenta()" id="form-cuenta" novalidate>
+        <div class="form-grid">
+          <div class="field">
+            <label for="cu-banco">Banco o billetera</label>
+            <select id="cu-banco" formControlName="banco">
+              @for (b of bancos; track b.id) { <option [value]="b.id">{{ b.etiqueta }}</option> }
+            </select>
+          </div>
+          <div class="field">
+            <label for="cu-tipo">Tipo de cuenta</label>
+            <select id="cu-tipo" formControlName="tipo">
+              @for (t of tiposCuenta; track t.id) { <option [value]="t.id">{{ t.etiqueta }}</option> }
+            </select>
+            @if (erroresCuenta().tipo) { <span class="error">{{ erroresCuenta().tipo }}</span> }
+          </div>
+          <div class="field">
+            <label for="cu-numero">{{ esBilleteraCuenta() ? 'Celular (9 dígitos)' : 'Número de cuenta' }}</label>
+            <input id="cu-numero" formControlName="numero" inputmode="numeric" autocomplete="off" [placeholder]="esBilleteraCuenta() ? '987654321' : '194-12345678-0-12'" />
+            @if (formCuenta.controls.numero.dirty && erroresCuenta().numero) { <span class="error">{{ erroresCuenta().numero }}</span> }
+          </div>
+          @if (!esBilleteraCuenta()) {
+            <div class="field">
+              <label for="cu-cci">CCI (opcional, 20 dígitos)</label>
+              <input id="cu-cci" formControlName="cci" inputmode="numeric" autocomplete="off" placeholder="00219400123456789012" />
+              @if (formCuenta.controls.cci.dirty && erroresCuenta().cci) { <span class="error">{{ erroresCuenta().cci }}</span> }
+            </div>
+          }
+          <div class="field full">
+            <label for="cu-titular">Titular de la cuenta</label>
+            <input id="cu-titular" formControlName="titular" maxlength="150" />
+            @if (formCuenta.controls.titular.touched && formCuenta.controls.titular.invalid) { <span class="error">Indica el titular.</span> }
+          </div>
+        </div>
+      </form>
+      @if (errorCuenta()) { <div class="aviso aviso-danger" style="margin-top: 14px" role="alert">{{ errorCuenta() }}</div> }
     } @else {
-      <!-- Paso de cursos: asignar al docente a secciones -->
+      <!-- Paso de cursos: asignar al docente a secciones (la ÚNICA vez que se eligen sus cursos) -->
       @let persona = personaContrato();
       @let carga = cargaAsignar();
-      <div class="exito-paso" role="status">
-        <span class="check-grande" aria-hidden="true">✓</span>
-        <span><strong>{{ persona?.nombres }} {{ persona?.apellidos }}</strong> quedó registrado(a). Ahora asígnale los cursos que dictará{{ anioAsignar() ? ' en ' + anioAsignar()!.nombre : '' }}.</span>
-      </div>
+      <p class="persona-paso"><strong>{{ persona?.nombres }} {{ persona?.apellidos }}</strong> · Elige qué cursos dictará, en qué secciones{{ anioAsignar() ? ' (' + anioAsignar()!.nombre + ')' : '' }}.</p>
 
       @if (cargandoAsignar()) {
         <p class="muted">Cargando secciones y cursos…</p>
@@ -390,8 +410,12 @@
         <div class="aviso aviso-warn" role="status">No hay un año activo ni planificado. Ábrelo en Apertura de periodo y asigna los cursos después.</div>
       } @else {
         <div class="barra-asig">
-          <label class="check"><input type="checkbox" [checked]="soloSuyos()" (change)="soloSuyos.set($any($event.target).checked)" /> Solo los cursos que dicta{{ persona?.cursoIds?.length ? '' : ' (no tiene cursos marcados)' }}</label>
-          <button type="button" class="btn btn-sm" [disabled]="sugeridasPendientes() === 0" (click)="elegirSugeridas()">Elegir todos los sugeridos libres ({{ sugeridasPendientes() }})</button>
+          <input class="buscar-asig" type="search" placeholder="Buscar curso, grado o sección…" aria-label="Buscar curso, grado o sección" [value]="textoAsignar()" (input)="textoAsignar.set($any($event.target).value)" />
+          @if (persona?.cursoIds?.length) {
+            <!-- Solo si ya dicta algo (al editar a quien ya estaba): un docente nuevo no tiene cursos previos y elige todo aquí. -->
+            <label class="check"><input type="checkbox" [checked]="soloSuyos()" (change)="soloSuyos.set($any($event.target).checked)" /> Solo los cursos que dicta</label>
+            <button type="button" class="btn btn-sm" [disabled]="sugeridasPendientes() === 0" (click)="elegirSugeridas()">Elegir todos los sugeridos libres ({{ sugeridasPendientes() }})</button>
+          }
           <button type="button" class="btn btn-sm" [disabled]="cantidadElegida() === 0" (click)="limpiarElegidas()">Quitar selección</button>
         </div>
         <div class="carga-asig" aria-live="polite">
@@ -434,6 +458,9 @@
         @if (!tieneCuentaPendiente()) { <button type="button" class="btn" [disabled]="guardandoContrato()" (click)="volverADatos()">← Datos</button> }
         <button type="button" class="btn" [disabled]="guardandoContrato()" (click)="omitirContrato()">Omitir por ahora</button>
         <button type="submit" form="form-contrato" class="btn btn-primary" [disabled]="guardandoContrato() || !!resumenContrato().falta">{{ guardandoContrato() ? 'Creando…' : esDocentePersona(personaContrato()) ? 'Crear contrato y seguir →' : 'Crear contrato' }}</button>
+      } @else if (paso() === 'deposito') {
+        <button type="button" class="btn" [disabled]="guardandoCuenta()" (click)="omitirDeposito()">Omitir por ahora</button>
+        <button type="submit" form="form-cuenta" class="btn btn-primary" [disabled]="guardandoCuenta()">{{ guardandoCuenta() ? 'Guardando…' : esDocentePersona(personaContrato()) ? 'Guardar cuenta y seguir →' : 'Guardar cuenta' }}</button>
       } @else {
         <button type="button" class="btn" [disabled]="guardandoAsignar()" (click)="omitirCursos()">{{ cantidadElegida() ? 'Omitir' : 'Terminar sin asignar' }}</button>
         <button type="button" class="btn btn-primary" [disabled]="guardandoAsignar() || cantidadElegida() === 0" (click)="asignarCursos()">{{ guardandoAsignar() ? 'Asignando…' : cantidadElegida() ? 'Asignar ' + cantidadElegida() + (cantidadElegida() === 1 ? ' curso' : ' cursos') : 'Asignar cursos' }}</button>

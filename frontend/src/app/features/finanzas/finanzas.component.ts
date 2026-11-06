@@ -10,7 +10,7 @@ import { PagoConfigService } from '../../core/services/pago-config.service';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 
 const ETIQUETA_MEDIO: Record<string, string> = {
-  EFECTIVO: 'Efectivo', ONLINE_SIMULADO: 'En línea', TRANSFERENCIA: 'Transferencia', TARJETA: 'Tarjeta', YAPE_PLIN: 'Yape o Plin'
+  EFECTIVO: 'Efectivo', ONLINE_SIMULADO: 'En línea', TRANSFERENCIA: 'Transferencia', TARJETA: 'Tarjeta', YAPE_PLIN: 'Yape o Plin', CREDITO: 'Crédito del alumno'
 };
 
 /** Panorama de finanzas del mes: cuánto se cobró, por qué medio, cuánto falta y qué vence pronto. */

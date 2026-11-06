@@ -34,5 +34,9 @@ public class Descuento {
     @Column(nullable = false)
     @Builder.Default
     private Boolean activo = true;
+
+    /** Código que la familia escribe en la matrícula en línea para canjear el descuento; nulo = solo lo asigna el administrador. */
+    @Column(length = 40)
+    private String codigo;
 }
 

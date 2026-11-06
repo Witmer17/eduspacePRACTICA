@@ -22,6 +22,13 @@ import java.util.Map;
 public class InternalPagoController {
 
     private final CuotaRepository cuotaRepository;
+    private final PlanPagoController planPagoController;
+
+    @GetMapping("/planes-pago")
+    @Operation(summary = "Formas de pago con su descuento (las usa la matrícula en línea del sitio público, que no tiene sesión)")
+    public List<PlanPagoController.Opcion> planesPago() {
+        return planPagoController.planes();
+    }
 
     @GetMapping("/alumno/{id}/deuda")
     @Operation(summary = "¿El alumno tiene deuda vencida? (Usado por matricula-ms para ratificación anual)")

@@ -3,6 +3,7 @@
 
   <div class="toolbar">
     <select class="input" aria-label="Año académico" (change)="cambiarAnio(+$any($event.target).value)">
+      @if (!anioId()) { <option value="0" selected>Sin periodo activo</option> }
       @for (a of anios(); track a.id) {
         <option [value]="a.id" [selected]="a.id === anioId()">{{ a.nombre }}{{ a.estado === 'ACTIVO' ? ' (activo)' : '' }}</option>
       }
@@ -37,9 +38,7 @@
     </section>
   }
 
-  @if (!cargando() && !anio()) {
-    <div class="aviso aviso-warn">Todavía no hay un año académico. Créalo en «Años y periodos» para poder armar secciones.</div>
-  }
+  <!-- Sin periodo activo no se muestra nada de un año: el aviso «No hay un periodo activo» lo pone el shell, y las tarjetas no cuentan secciones. -->
 
   <!-- Una tarjeta por grado, agrupadas por nivel -->
   @for (g of grupos(); track g.nivel.id) {
@@ -47,7 +46,7 @@
       <h2 class="nivel-titulo">{{ g.nivel.nombre }}<span class="nivel-cuenta">{{ g.tarjetas.length }} {{ g.tarjetas.length === 1 ? 'grado' : 'grados' }}</span></h2>
       <div class="grados">
         @for (t of g.tarjetas; track t.grado.id) {
-          <a class="g-card" [class.con-grave]="t.graves > 0" [routerLink]="'/configuracion/estructura/' + t.grado.id"
+          <a class="g-card" [class.con-grave]="t.graves > 0" [routerLink]="'/configuracion/estructura/' + t.grado.id" [queryParams]="{ anioId: anioId() }"
              [attr.aria-label]="'Abrir ' + t.grado.nombre + ': ' + t.alumnos + ' alumnos, ' + t.vacantes + ' vacantes, ' + t.secciones.length + ' secciones'">
             <div class="g-banda">
               <span class="g-emblema" aria-hidden="true">{{ t.emblema }}</span>

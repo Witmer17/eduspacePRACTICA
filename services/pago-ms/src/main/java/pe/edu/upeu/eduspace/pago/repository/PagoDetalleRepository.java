@@ -12,5 +12,8 @@ public interface PagoDetalleRepository extends JpaRepository<PagoDetalle, Long> 
     List<PagoDetalle> findByPagoId(Long pagoId);
 
     List<PagoDetalle> findByCuotaId(Long cuotaId);
+
+    /** ¿La cuota ya tiene un pago en ese estado? (p. ej. uno del apoderado todavía por aprobar). */
+    boolean existsByCuotaIdAndPagoEstado(Long cuotaId, String estado);
 }
 

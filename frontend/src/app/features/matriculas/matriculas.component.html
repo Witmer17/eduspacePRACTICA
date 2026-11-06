@@ -99,6 +99,10 @@
           <label for="n-tipo">Tipo</label>
           <select id="n-tipo" formControlName="tipo">@for (t of tipos; track t) { <option [value]="t">{{ t }}</option> }</select>
         </div>
+        <div class="field">
+          <label for="n-plan">Forma de pago de las pensiones</label>
+          <select id="n-plan" formControlName="planPago">@for (p of planesPago(); track p.id) { <option [value]="p.id">{{ textoPlan(p) }}</option> }</select>
+        </div>
         <div class="field full">
           <label for="n-obs">Observaciones</label>
           <input id="n-obs" formControlName="observaciones" />

@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { AlertaAdmin, Morosos } from '../../../core/models/pago.model';
+import { AuthService } from '../../../core/services/auth.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { PagoConfigService } from '../../../core/services/pago-config.service';
 import { mensajeError } from '../../../core/utils/errores';
@@ -21,6 +22,8 @@ const ETIQUETA_ALERTA: Record<string, string> = {
 export class MorososComponent implements OnInit {
   private readonly api = inject(PagoConfigService);
   private readonly avisos = inject(NotificationService);
+  /** Las alertas de cobranza son de administración y secretaría; caja solo ve el reporte de morosos. */
+  protected readonly veAlertas = inject(AuthService).tieneAlgunRol(['ADMIN', 'SECRETARIA']);
 
   protected readonly morosos = signal<Morosos | null>(null);
   protected readonly alertas = signal<AlertaAdmin[]>([]);
@@ -51,7 +54,7 @@ export class MorososComponent implements OnInit {
         this.avisos.error(mensajeError(e, 'No se pudo cargar el reporte de morosidad.'));
       }
     });
-    this.cargarAlertas();
+    if (this.veAlertas) this.cargarAlertas();
   }
 
   protected alternarResueltas(): void {

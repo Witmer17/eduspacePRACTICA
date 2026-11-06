@@ -168,9 +168,10 @@ export class PlanificacionService {
   }
 
   /** Todo el personal del colegio (o el de un área), no solo los docentes. `docentes()` sigue devolviendo solo Docencia. */
-  personal(q = '', page = 0, size = 20, areaId?: number | null): Observable<Page<Docente>> {
+  personal(q = '', page = 0, size = 20, areaId?: number | null, estado: 'ACTIVO' | 'INACTIVO' | 'TODOS' = 'TODOS'): Observable<Page<Docente>> {
     let params = new HttpParams().set('page', page).set('size', size);
     if (q) params = params.set('q', q);
+    if (estado !== 'TODOS') params = params.set('estado', estado);
     params = areaId ? params.set('areaId', areaId) : params.set('todas', true);
     return this.http
       .get<{ contenido: Docente[]; pagina: number; tamano: number; total: number; totalPaginas: number }>(`${API}/docentes`, { params })
@@ -207,6 +208,9 @@ export class PlanificacionService {
   /** Fija cuántos alumnos caben en cada aula del pabellón, todo o nada. */
   fijarCapacidadesPabellon(id: number, aulas: { aulaId: number; capacidad: number }[]): Observable<Aula[]> {
     return this.http.put<Aula[]>(`${API}/pabellones/${id}/capacidades`, { aulas });
+  }
+  fijarGradosPabellon(id: number, gradoIds: number[]): Observable<Pabellon> {
+    return this.http.put<Pabellon>(`${API}/pabellones/${id}/grados`, { gradoIds });
   }
   eliminarPabellon(id: number): Observable<void> {
     return this.http.delete<void>(`${API}/pabellones/${id}`);

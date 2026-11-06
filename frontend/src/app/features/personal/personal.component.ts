@@ -5,8 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AREA_DOCENCIA, Anio, Area, Asignacion, Curso, Docente, DocenteRequest, MallaGrado, Seccion } from '../../core/models/planificacion.model';
-import { FichaCurso, armarFichas } from '../configuracion/cursos/cursos-estandar';
-import { Cobertura, EstadoCobertura, NIVELES_CURSO, coberturaCursos, fichasDelNivel, puestoDeArea, sinDocentePrimero, textoCobertura } from './cursos-docente';
+import { puestoDeArea } from './cursos-docente';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { CuentasService } from '../../core/services/cuentas.service';
@@ -15,11 +14,11 @@ import { PlanificacionService } from '../../core/services/planificacion.service'
 import { mensajeError } from '../../core/utils/errores';
 import { ModalComponent } from '../../shared/components/modal/modal.component';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
-import { Contrato, ContratoRequest, TipoContrato } from '../../core/models/rrhh.model';
-import { armarOpciones, cargaSemanal, filtrarGrupos, opcionesElegidas, sugeridasLibres } from './asignar-cursos';
+import { Contrato, ContratoRequest, CuentaDeposito, TipoContrato, TipoCuenta } from '../../core/models/rrhh.model';
+import { armarOpciones, cargaSemanal, cursosDelDocente, filtrarGrupos, filtrarPorTexto, opcionesElegidas, sugeridasLibres } from './asignar-cursos';
 import { RrhhService } from '../../core/services/rrhh.service';
 import { hoyLocal } from './asistencia-personal';
-import { TARDANZAS_POR_DIA, TIPOS_CONTRATO, contratoQueImpideOtro, diasDelMes, duracionContrato, fechaCorta, finDeAnio, finPorMeses, primerDiaMesSiguiente, soles, valorDia } from './rrhh';
+import { BANCOS, TARDANZAS_POR_DIA, TIPOS_CONTRATO, TIPOS_CUENTA, erroresCuenta as validarCuenta, esBilletera, soloDigitos, contratoQueImpideOtro, diasDelMes, duracionContrato, fechaCorta, finDeAnio, finPorMeses, primerDiaMesSiguiente, soles, valorDia } from './rrhh';
 import { DOCUMENTO_MINIMO, ROLES_PERSONAL, RolPersonal, documentoSirveDeClave, rolSugerido, usuarioPrevisto } from './cuenta-personal';
 
 /**
@@ -47,6 +46,8 @@ import { DOCUMENTO_MINIMO, ROLES_PERSONAL, RolPersonal, documentoSirveDeClave, r
     .pasos .activo .num-paso { background: var(--primary); color: #fff; }
     .pasos .hecho { color: var(--ok); }
     .pasos .hecho .num-paso { background: var(--ok); color: #fff; }
+    .persona-paso { margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+    .buscar-asig { flex: 1 1 220px; min-width: 0; padding: 7px 12px; border: 1.5px solid var(--line-2); border-radius: 10px; font: inherit; }
     .exito-paso { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: var(--ok-soft); color: var(--ok); }
     .check-grande { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: var(--ok); color: #fff; font-weight: 900; }
     /* Fuera de .form-grid el margen negativo del título de sección lo monta sobre el campo siguiente: se corrige en este paso. */
@@ -161,34 +162,16 @@ export class PersonalComponent implements OnInit {
   protected readonly areas = signal<Area[]>([]);
   protected readonly personal = signal<Docente[]>([]);
 
-  // --- Cursos que dictará (solo áreas que dictan cursos, hoy Docencia) ---
-  protected readonly nivelesCurso = NIVELES_CURSO;
+  // --- Cursos: se eligen UNA sola vez, en el paso «Cursos» (por sección). Aquí solo lo necesario para la ficha y el aviso del formulario. ---
   private readonly cursos = signal<Curso[]>([]);
-  private readonly docentesActivos = signal<Docente[]>([]);
   private readonly asignaciones = signal<Asignacion[]>([]);
-  protected readonly nivelCurso = signal<string | null>(null);
-  /** Cursos elegidos por clave de ficha (los estándar que aún no existen se crean al guardar). */
-  protected readonly cursosElegidos = signal<ReadonlySet<string>>(new Set());
   private readonly areaDelForm = signal(0);
   protected readonly puesto = computed(() => puestoDeArea(this.areas().find(a => a.id === this.areaDelForm())?.codigo));
-  private readonly fichas = computed(() => armarFichas(this.cursos().filter(c => c.activo), {}));
-  private readonly cobertura = computed(() => coberturaCursos(this.docentesActivos(), this.asignaciones()));
-  /** Los cursos del nivel elegido, con los que no tienen docente primero. */
-  protected readonly fichasVisibles = computed(() =>
-    sinDocentePrimero(fichasDelNivel(this.fichas(), this.nivelCurso()), f => this.cobDe(f)));
-  protected readonly sinDocenteCount = computed(() => this.fichasVisibles().filter(f => this.cobDe(f).estado === 'sin-docente' && !this.cursosElegidos().has(f.clave)).length);
-
-  protected cobDe(f: FichaCurso): Cobertura {
-    return this.cobertura()(f.existente?.id);
-  }
-
-  protected etiquetaCob(e: EstadoCobertura): string {
-    return e === 'asignado' ? 'Con docente' : e === 'apto' ? 'Sin asignar' : 'Sin docente';
-  }
-
-  protected tituloCob(f: FichaCurso): string {
-    return textoCobertura(this.cobDe(f));
-  }
+  /** Los cursos que ya dicta quien se está editando (solo lectura: se cambian en el paso «Cursos», asignándolos por sección). */
+  protected readonly cursosDeLaPersona = computed(() => {
+    const ids = new Set(this.editando()?.cursoIds ?? []);
+    return this.cursos().filter(c => ids.has(c.id)).map(c => c.nombre).sort((a, b) => a.localeCompare(b, 'es'));
+  });
 
   // --- Ficha de la persona (botón de ícono de la lista) ---
   private readonly seccionesAnio = signal<Seccion[]>([]);
@@ -219,12 +202,6 @@ export class PersonalComponent implements OnInit {
     if (p) this.editar(p);
   }
 
-  protected alternarCurso(f: FichaCurso, on: boolean): void {
-    const s = new Set(this.cursosElegidos());
-    if (on) s.add(f.clave);
-    else s.delete(f.clave);
-    this.cursosElegidos.set(s);
-  }
   protected readonly total = signal(0);
   protected readonly paginas = signal(1);
   protected readonly pagina = signal(0);
@@ -236,7 +213,7 @@ export class PersonalComponent implements OnInit {
   protected readonly errorForm = signal<string | null>(null);
 
   // --- Paso 2 de «Agregar personal»: el contrato, en la misma ventana (solo el administrador lo puede crear) ---
-  protected readonly paso = signal<'datos' | 'contrato' | 'cursos'>('datos');
+  protected readonly paso = signal<'datos' | 'contrato' | 'deposito' | 'cursos'>('datos');
   /** La persona recién guardada a la que se le está haciendo el contrato. */
   protected readonly personaContrato = signal<Docente | null>(null);
   /** Cuenta creada en el paso 1: sus datos se muestran al terminar, no antes. */
@@ -248,7 +225,6 @@ export class PersonalComponent implements OnInit {
   protected readonly tardanzasPorDia = TARDANZAS_POR_DIA;
   protected readonly formContrato = this.fb.nonNullable.group({
     tipo: ['PLAZO_FIJO' as TipoContrato, Validators.required],
-    cargo: [''],
     fechaInicio: ['', Validators.required],
     fechaFin: [''],
     remuneracion: [0, [Validators.required, Validators.min(0)]],
@@ -298,6 +274,8 @@ export class PersonalComponent implements OnInit {
 
   /** 0 = todas las áreas. */
   protected readonly areaFiltro = this.fb.nonNullable.control(0);
+  /** Por defecto solo el personal activo; los inactivos (dados de baja) se ven eligiendo «Inactivos». */
+  protected readonly estadoFiltro = this.fb.nonNullable.control<'ACTIVO' | 'INACTIVO' | 'TODOS'>('ACTIVO');
   protected readonly busqueda = this.fb.nonNullable.control('');
 
   protected readonly areaElegida = computed(() => this.areas().find(a => a.id === this.areaFiltroId()) ?? null);
@@ -329,6 +307,17 @@ export class PersonalComponent implements OnInit {
 
   constructor() {
     this.formContrato.valueChanges.pipe(takeUntilDestroyed(this.destruido)).subscribe(() => this.vistaContrato.set(this.formContrato.getRawValue()));
+    // Cuenta de depósito: Yape y Plin son billeteras (sin CCI) y una billetera es siempre Yape o Plin.
+    this.formCuenta.valueChanges.pipe(takeUntilDestroyed(this.destruido)).subscribe(() => this.vistaCuenta.set(this.formCuenta.getRawValue()));
+    this.formCuenta.controls.banco.valueChanges.pipe(takeUntilDestroyed(this.destruido)).subscribe(b => {
+      if (esBilletera(b)) { this.formCuenta.controls.tipo.setValue('BILLETERA'); this.formCuenta.controls.cci.setValue(''); }
+      else if (this.formCuenta.controls.tipo.value === 'BILLETERA') this.formCuenta.controls.tipo.setValue('AHORROS');
+    });
+    this.formCuenta.controls.tipo.valueChanges.pipe(takeUntilDestroyed(this.destruido)).subscribe(t => {
+      const b = this.formCuenta.controls.banco;
+      if (t === 'BILLETERA' && !esBilletera(b.value)) b.setValue('YAPE');
+      if (t === 'BILLETERA') this.formCuenta.controls.cci.setValue('');
+    });
     // Al elegir el área, se sugiere el rol que le corresponde (si la persona todavía no eligió uno a mano).
     this.form.controls.areaId.valueChanges.pipe(takeUntilDestroyed(this.destruido)).subscribe(id => {
       this.areaDelForm.set(Number(id));
@@ -372,7 +361,6 @@ export class PersonalComponent implements OnInit {
   /** Cursos, docentes y asignaciones del año: sirven para marcar qué cursos ya tienen docente y cuáles no. */
   private cargarCursos(): void {
     this.api.cursos().pipe(catchError(() => of([] as Curso[]))).subscribe(c => this.cursos.set(c));
-    this.api.docentes('', 0, 200).pipe(map(p => p.contenido), catchError(() => of([] as Docente[]))).subscribe(d => this.docentesActivos.set(d));
     this.api.anios().pipe(catchError(() => of([] as Anio[]))).subscribe(anios => {
       const anio = anios.find(a => a.estado === 'ACTIVO') ?? anios.find(a => a.estado === 'PLANIFICADO');
       if (anio) {
@@ -395,7 +383,7 @@ export class PersonalComponent implements OnInit {
 
   private cargar(pagina: number): void {
     this.cargando.set(true);
-    this.api.personal(this.busqueda.value.trim(), pagina, 15, this.areaFiltro.value || null).subscribe({
+    this.api.personal(this.busqueda.value.trim(), pagina, 15, this.areaFiltro.value || null, this.estadoFiltro.value).subscribe({
       next: p => {
         this.personal.set(p.contenido);
         this.total.set(p.totalElementos);
@@ -421,8 +409,6 @@ export class PersonalComponent implements OnInit {
     const porDefecto = this.areaFiltro.value || this.areas().find(a => a.codigo === AREA_DOCENCIA)?.id || 0;
     this.form.reset({ areaId: porDefecto, cargo: '', tipoDocumento: 'DNI', numeroDocumento: '', nombres: '', apellidos: '', email: '', telefono: '', especialidad: '', crearCuenta: false, rolCuenta: '' });
     this.areaDelForm.set(porDefecto);
-    this.cursosElegidos.set(new Set());
-    this.nivelCurso.set(null);
     this.abrir(null);
   }
 
@@ -433,10 +419,6 @@ export class PersonalComponent implements OnInit {
       crearCuenta: false, rolCuenta: ''
     });
     this.areaDelForm.set(p.areaId ?? 0);
-    // Sus cursos actuales quedan marcados (los que ya no existen en el catálogo se ignoran).
-    const claves = (p.cursoIds ?? []).map(id => this.fichas().find(f => f.existente?.id === id)?.clave).filter((c): c is string => !!c);
-    this.cursosElegidos.set(new Set(claves));
-    this.nivelCurso.set(null);
     this.abrir(p);
   }
 
@@ -486,30 +468,11 @@ export class PersonalComponent implements OnInit {
         return this.errorForm.set(`Para crear la cuenta, el documento (que será su clave inicial) debe tener entre ${DOCUMENTO_MINIMO} y 20 letras o números, sin guiones ni espacios.`);
       }
     }
-    // Quien dicta cursos tiene que decir cuáles: al contratarlo se elige para qué será (al editar a quien ya estaba, es opcional).
-    const elegidas = this.fichas().filter(f => this.cursosElegidos().has(f.clave));
-    const conCursos = this.esDocencia();
-    if (conCursos && !e && !elegidas.length) return this.errorForm.set('Elige al menos un curso que dictará: así se le proponen secciones al armar los horarios.');
+    // Los cursos NO se piden aquí: se eligen una sola vez, en el paso «Cursos» (por sección), y de ahí se arma la lista de cursos del docente.
+    // Sin cursoIds el servidor deja intacta la lista que ya tenía (y vacía la de una persona nueva).
     this.guardando.set(true);
     this.errorForm.set(null);
-
-    // Los cursos estándar que el colegio aún no tiene se crean primero; después se guarda a la persona con todos sus cursos.
-    const porCrear = elegidas.filter(f => !f.existente);
-    const crearCursos$ = porCrear.length
-      ? forkJoin(porCrear.map(f => this.api.crearCurso({ codigo: f.codigo, nombre: f.nombre, area: f.area, activo: true })))
-      : of([] as Curso[]);
-    crearCursos$.pipe(
-      map(creados => (conCursos ? [...elegidas.filter(f => f.existente).map(f => f.existente!.id), ...creados.map(c => c.id)] : undefined))
-    ).subscribe({
-      next: cursoIds => {
-        if (porCrear.length) this.api.cursos().pipe(catchError(() => of(this.cursos()))).subscribe(c => this.cursos.set(c));
-        this.enviar(e, { ...body, cursoIds }, conCuenta, v.rolCuenta, continuar && this.hayPasoSiguiente());
-      },
-      error: err => {
-        this.guardando.set(false);
-        this.errorForm.set(mensajeError(err));
-      }
-    });
+    this.enviar(e, body, conCuenta, v.rolCuenta, continuar && this.hayPasoSiguiente());
   }
 
   private enviar(e: Docente | null, body: DocenteRequest, conCuenta: boolean, rolCuenta: RolPersonal | '', continuar = false): void {
@@ -591,12 +554,85 @@ export class PersonalComponent implements OnInit {
     this.contratoExistente.set(null);
     this.rrhh.contratos(persona.id).pipe(catchError(() => of([] as Contrato[]))).subscribe(lista => this.contratoExistente.set(contratoQueImpideOtro(lista) ?? null));
     this.tipoContratoElegido('PLAZO_FIJO');
-    this.formContrato.reset({ tipo: 'PLAZO_FIJO', cargo: persona.cargo ?? '', fechaInicio: hoyLocal(), fechaFin: '', remuneracion: 0, observaciones: '' });
+    this.formContrato.reset({ tipo: 'PLAZO_FIJO', fechaInicio: hoyLocal(), fechaFin: '', remuneracion: 0, observaciones: '' });
     this.paso.set('contrato');
   }
 
-  /** Terminado (o saltado) el contrato: si es docente sigue la asignación de cursos; si no, se cierra. */
+  /** Terminado (o saltado) el contrato sigue la cuenta de depósito. */
   private despuesDelContrato(persona: Docente): void {
+    this.iniciarDeposito(persona);
+  }
+
+  // ---------- Paso de la cuenta para depositar el sueldo (administrador) ----------
+  protected readonly bancos = BANCOS;
+  protected readonly tiposCuenta = TIPOS_CUENTA;
+  protected readonly guardandoCuenta = signal(false);
+  protected readonly errorCuenta = signal<string | null>(null);
+  /** Cuentas que la persona ya tenía (al editar a alguien que ya estaba): si hay, la nueva no es la principal. */
+  protected readonly cuentasExistentes = signal<CuentaDeposito[]>([]);
+  protected readonly formCuenta = this.fb.nonNullable.group({
+    banco: ['BCP', Validators.required],
+    tipo: ['AHORROS' as TipoCuenta, Validators.required],
+    numero: [''],
+    cci: [''],
+    titular: ['', Validators.required]
+  });
+  private readonly vistaCuenta = signal(this.formCuenta.getRawValue());
+  protected readonly esBilleteraCuenta = computed(() => this.vistaCuenta().tipo === 'BILLETERA');
+  /** Las mismas reglas que el servidor, en vivo. */
+  protected readonly erroresCuenta = computed(() => {
+    const v = this.vistaCuenta();
+    return validarCuenta(v.banco, v.tipo, v.numero, v.cci);
+  });
+
+  private iniciarDeposito(persona: Docente): void {
+    this.personaContrato.set(persona);
+    this.errorCuenta.set(null);
+    this.cuentasExistentes.set([]);
+    this.rrhh.cuentas(persona.id).pipe(catchError(() => of([] as CuentaDeposito[]))).subscribe(c => this.cuentasExistentes.set(c));
+    this.formCuenta.reset({ banco: 'BCP', tipo: 'AHORROS', numero: '', cci: '', titular: `${persona.nombres} ${persona.apellidos}` });
+    this.paso.set('deposito');
+  }
+
+  /** Guarda la cuenta de depósito (la primera de la persona es la principal) y sigue con los cursos si es docente. */
+  protected guardarCuenta(): void {
+    const persona = this.personaContrato();
+    const e = this.erroresCuenta();
+    if (!persona) return;
+    if (this.formCuenta.invalid || e.tipo || e.numero || e.cci) {
+      this.formCuenta.markAllAsTouched();
+      this.formCuenta.controls.numero.markAsDirty();
+      this.formCuenta.controls.cci.markAsDirty();
+      return this.errorCuenta.set(e.tipo || e.numero || e.cci || 'Indica el titular de la cuenta.');
+    }
+    const v = this.formCuenta.getRawValue();
+    this.guardandoCuenta.set(true);
+    this.errorCuenta.set(null);
+    this.rrhh.agregarCuenta({
+      personalId: persona.id, banco: v.banco, tipo: v.tipo, numero: soloDigitos(v.numero), cci: v.tipo === 'BILLETERA' ? undefined : soloDigitos(v.cci) || undefined,
+      titular: v.titular.trim(), principal: this.cuentasExistentes().length === 0
+    }).subscribe({
+      next: () => {
+        this.guardandoCuenta.set(false);
+        this.avisos.success(`Cuenta de depósito registrada para ${persona.nombres} ${persona.apellidos}.`);
+        this.despuesDelDeposito(persona);
+      },
+      error: err => {
+        this.guardandoCuenta.set(false);
+        this.errorCuenta.set(mensajeError(err));
+      }
+    });
+  }
+
+  protected omitirDeposito(): void {
+    const persona = this.personaContrato();
+    this.avisos.info('Sin cuenta de depósito por ahora: puedes registrarla en Personal → Pago al personal → «Cuenta de depósito».');
+    if (persona) this.despuesDelDeposito(persona);
+    else this.cerrar();
+  }
+
+  /** Terminada (o saltada) la cuenta: si es docente sigue la asignación de cursos; si no, se cierra. */
+  private despuesDelDeposito(persona: Docente): void {
     if (this.esDocentePersona(persona)) this.iniciarCursos(persona);
     else this.cerrar();
   }
@@ -621,7 +657,7 @@ export class PersonalComponent implements OnInit {
     const docente = this.paso() === 'datos' ? this.areaDelFormEsDocencia() : this.esDocentePersona(this.personaContrato());
     return [
       { id: 'datos' as const, etiqueta: 'Datos del personal' },
-      ...(this.puedeCrearContrato() ? [{ id: 'contrato' as const, etiqueta: 'Contrato' }] : []),
+      ...(this.puedeCrearContrato() ? [{ id: 'contrato' as const, etiqueta: 'Contrato' }, { id: 'deposito' as const, etiqueta: 'Cuenta de depósito' }] : []),
       ...(docente ? [{ id: 'cursos' as const, etiqueta: 'Cursos' }] : [])
     ];
   });
@@ -669,7 +705,8 @@ export class PersonalComponent implements OnInit {
       return this.errorContrato.set(falta || 'No se pudo identificar a la persona.');
     }
     const body: ContratoRequest = {
-      personalId: persona.id, tipo: v.tipo, cargo: v.cargo.trim() || undefined, fechaInicio: v.fechaInicio,
+      // El cargo ya se escribió en los datos de la persona: el contrato lo hereda (no se pide dos veces).
+      personalId: persona.id, tipo: v.tipo, cargo: persona.cargo || undefined, fechaInicio: v.fechaInicio,
       fechaFin: v.tipo === 'INDEFINIDO' ? undefined : v.fechaFin, remuneracion: Number(v.remuneracion), observaciones: v.observaciones.trim() || undefined
     };
     this.guardandoContrato.set(true);
@@ -711,7 +748,8 @@ export class PersonalComponent implements OnInit {
     return p ? armarOpciones(this.seccionesAsignar(), this.mallasAsignar(), this.asignacionesAsignar(), p) : [];
   });
   /** Las secciones y cursos que se muestran, según «solo sus cursos». */
-  protected readonly gruposVisibles = computed(() => filtrarGrupos(this.gruposAsignar(), this.soloSuyos()));
+  protected readonly textoAsignar = signal('');
+  protected readonly gruposVisibles = computed(() => filtrarPorTexto(filtrarGrupos(this.gruposAsignar(), this.soloSuyos()), this.textoAsignar()));
   protected readonly cargaAsignar = computed(() => cargaSemanal(this.gruposAsignar(), this.elegidasAsignar()));
   protected readonly cantidadElegida = computed(() => opcionesElegidas(this.gruposAsignar(), this.elegidasAsignar()).length);
   protected readonly sugeridasPendientes = computed(() => sugeridasLibres(filtrarGrupos(this.gruposAsignar(), true)).filter(c => !this.elegidasAsignar().has(c)).length);
@@ -720,6 +758,7 @@ export class PersonalComponent implements OnInit {
     this.personaContrato.set(persona);
     this.errorAsignar.set(null);
     this.elegidasAsignar.set(new Set());
+    this.textoAsignar.set('');
     // Si ya se sabe qué cursos dicta, se muestran solo esos; si no tiene ninguno marcado, todos los del grado.
     this.soloSuyos.set(!!persona.cursoIds?.length);
     this.paso.set('cursos');
@@ -783,6 +822,9 @@ export class PersonalComponent implements OnInit {
       this.guardandoAsignar.set(false);
       const falladas = res.filter(r => !r.ok);
       const hechas = res.length - falladas.length;
+      // Lo que se asignó pasa a ser su lista de cursos (así el armado automático de horarios lo propone para esos cursos).
+      const nuevos = res.filter(r => r.ok).map(r => r.o.cursoId);
+      if (nuevos.length) this.sincronizarCursos(persona, nuevos);
       this.cargarCursos();
       if (!falladas.length) {
         this.avisos.success(`${hechas} ${hechas === 1 ? 'curso asignado' : 'cursos asignados'} a ${persona.nombres} ${persona.apellidos}.`);
@@ -794,6 +836,16 @@ export class PersonalComponent implements OnInit {
       this.elegidasAsignar.set(new Set());
       this.cargarAsignar();
     });
+  }
+
+  /** Suma los cursos asignados a la lista de cursos del docente (los que ya tenía se conservan). Si falla no se pierde nada: las asignaciones ya existen. */
+  private sincronizarCursos(persona: Docente, asignados: readonly number[]): void {
+    const cursoIds = cursosDelDocente(persona.cursoIds, asignados);
+    const body: DocenteRequest = {
+      areaId: persona.areaId, cargo: persona.cargo, tipoDocumento: persona.tipoDocumento, numeroDocumento: persona.numeroDocumento,
+      nombres: persona.nombres, apellidos: persona.apellidos, email: persona.email, telefono: persona.telefono, especialidad: persona.especialidad, cursoIds
+    };
+    this.api.actualizarDocente(persona.id, body).pipe(catchError(() => of(null))).subscribe(() => this.cargar(this.pagina()));
   }
 
   private seccionDe(seccionId: number): string {

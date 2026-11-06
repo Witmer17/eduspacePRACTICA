@@ -76,10 +76,14 @@ async function datos(page, { doc, apellido, curso, area }) {
   await page.fill('#p-nombres', 'UI');
   await page.fill('#p-apellidos', apellido);
   await page.fill('#p-email', `ui${doc}@colegio.pe`);
-  if (curso) {
-    await page.locator('.lista-cursos .curso', { has: page.locator('strong', { hasText: new RegExp(`^${curso}$`) }) }).first().click();
-    await hasta(() => page.locator('.bloque-cursos .cab .muted').innerText(), t => t.includes('1 elegido'), 'no quedó 1 curso elegido');
-  }
+  // Los cursos ya no se eligen en los datos (solo en el paso «Cursos», por sección): el parámetro {curso} queda por compatibilidad y no hace nada.
+}
+/** En el paso «Cursos»: busca un curso y marca el primero libre. */
+async function elegirCursoLibre(page, texto) {
+  await page.fill('.buscar-asig', texto);
+  const libre = page.locator('app-modal .curso-asig:not(.ocupado) input[type=checkbox]:not(:disabled)').first();
+  await libre.waitFor();
+  await libre.check();
 }
 const pasosVisibles = async page => (await page.locator('app-modal ol.pasos li:not(.separador)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
 const textoModal = page => page.locator('app-modal').innerText();
@@ -141,7 +145,7 @@ const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${Str
     await page.waitForSelector('app-modal #form-personal');
     esperar((await textoModal(page)).includes('Editar personal'), 'debería estar en «Editar personal»');
     esperar(await page.inputValue('#p-nombres') === 'UI' && await page.inputValue('#p-apellidos') === AP_A, 'los datos no quedaron cargados');
-    esperar((await pasosVisibles(page)).length === 3, 'el indicador debería seguir con 3 pasos');
+    esperar((await pasosVisibles(page)).length === 4, 'el indicador debería seguir con 4 pasos (datos, contrato, cuenta de depósito, cursos)');
     await foto(page, '01-atras');
   }, page);
   await paso('cambia el cargo y vuelve a continuar sin duplicar a la persona', async () => {
@@ -151,12 +155,14 @@ const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${Str
     await page.waitForSelector('app-modal .contrato-layout');
     esperar((await textoModal(page)).includes('Contrato de UI'), 'no volvió al contrato');
   }, page);
-  await paso('crea el contrato (3 meses, S/ 1200), omite los cursos y la ventana se cierra', async () => {
+  await paso('crea el contrato (3 meses, S/ 1200), omite la cuenta de depósito y los cursos, y la ventana se cierra', async () => {
     esperar(creadoA, 'no se guardó la persona');
     await page.getByRole('button', { name: '3 meses' }).click();
     await page.fill('#ct-rem', '1200');
     await hasta(() => page.getByRole('button', { name: /Crear contrato y seguir/ }).isEnabled(), e => e, 'el botón no se habilitó');
     await page.getByRole('button', { name: /Crear contrato y seguir/ }).click();
+    await hasta(() => textoModal(page), t => t.includes('Cuenta de depósito de UI'), 'no llegó a la cuenta de depósito');
+    await page.getByRole('button', { name: 'Omitir por ahora' }).click();
     await hasta(() => textoModal(page), t => t.includes('Cursos de UI'), 'no llegó a cursos');
     await page.getByRole('button', { name: /Terminar sin asignar|^Omitir$/ }).click();
     await page.waitForSelector('app-modal', { state: 'detached' });
@@ -173,10 +179,11 @@ const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${Str
   // --- Persona de otra área con cuenta de acceso ---
   console.log('== Otra área: cuenta de acceso dentro del flujo');
   const DOC_B = '7' + sufijo, AP_B = 'Prueba Cuenta ' + sufijo.slice(-3);
-  await paso('un área que no es Docencia solo tiene 2 pasos (sin «Cursos»)', async () => {
+  await paso('un área que no es Docencia tiene 3 pasos (datos, contrato, cuenta de depósito; sin «Cursos»)', async () => {
     await abrirAgregar(page);
     await page.selectOption('#p-area', { label: 'Administración y recursos humanos' });
-    await hasta(() => pasosVisibles(page), p => p.length === 2, 'se esperaban 2 pasos');
+    await hasta(() => pasosVisibles(page), p => p.length === 3, 'se esperaban 3 pasos');
+    esperar(!(await pasosVisibles(page)).join(' ').includes('Cursos'), 'no debería tener paso de cursos');
     esperar(await page.getByRole('button', { name: /Guardar y crear contrato/ }).isVisible(), 'el botón debería decir «Guardar y crear contrato →»');
   }, page);
   await paso('marca «crear cuenta», guarda y continúa: «← Datos» desaparece (la cuenta ya existe)', async () => {
@@ -189,7 +196,10 @@ const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${Str
     esperar(await page.getByRole('button', { name: /← Datos/ }).count() === 0, '«← Datos» no debería ofrecerse con la cuenta ya creada');
     await foto(page, '02-con-cuenta');
   }, page);
-  await paso('«Omitir por ahora» cierra y recién ahí muestra el usuario y la clave inicial', async () => {
+  await paso('«Omitir por ahora» (contrato y cuenta de depósito) cierra y recién ahí muestra el usuario y la clave inicial', async () => {
+    await page.getByRole('button', { name: 'Omitir por ahora' }).click();
+    await hasta(() => textoModal(page), t => t.includes('Cuenta de depósito de UI'), 'tras omitir el contrato debería venir la cuenta de depósito');
+    esperar(!(await textoModal(page)).includes('Cuenta creada'), 'los datos de la cuenta de acceso no deben mostrarse antes de terminar');
     await page.getByRole('button', { name: 'Omitir por ahora' }).click();
     await page.waitForSelector('app-modal .credenciales');
     const t = (await textoModal(page)).replace(/\s+/g, ' ');
@@ -446,6 +456,8 @@ const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${Str
     await hasta(() => textoModal(page), t => t.includes('ya tiene un contrato'), 'debería avisar que ya tiene un contrato');
     await hasta(() => page.getByRole('button', { name: /Crear contrato/ }).isDisabled(), d => d, '«Crear contrato» debería estar bloqueado');
     await foto(page, '18-ya-tiene-contrato');
+    await page.getByRole('button', { name: 'Omitir por ahora' }).click();       // sigue la cuenta de depósito
+    await hasta(() => textoModal(page), t => t.includes('Cuenta de depósito de UI'), 'debería seguir la cuenta de depósito');
     await page.getByRole('button', { name: 'Omitir por ahora' }).click();
     await page.waitForSelector('app-modal', { state: 'detached' });
   }, page);
@@ -510,9 +522,7 @@ const mesActual = () => { const d = new Date(); return `${d.getFullYear()}-${Str
     await pageS.getByRole('button', { name: /Guardar y asignar cursos/ }).click();
     await hasta(() => textoModal(pageS), t => t.includes('Cursos de UI'), 'no llegó a cursos');
     esperar(!(await textoModal(pageS)).includes('Contrato de'), 'no debería pasar por el contrato');
-    const btn = pageS.getByRole('button', { name: /Elegir todos los sugeridos libres/ });
-    esperar(await btn.isEnabled(), 'no hay cursos sugeridos libres para asignar');
-    await btn.click();
+    await elegirCursoLibre(pageS, 'Matemática');
     await pageS.getByRole('button', { name: /^Asignar \d+ cursos?$/ }).click();
     await pageS.waitForSelector('app-modal', { state: 'detached' });
     await foto(pageS, '09-secretaria-asignado');

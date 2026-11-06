@@ -10,7 +10,8 @@ import { PageHeaderComponent } from '../../../shared/components/page-header/page
 @Component({
   selector: 'app-descuentos',
   imports: [ReactiveFormsModule, ModalComponent, PageHeaderComponent],
-  templateUrl: './descuentos.component.html'
+  templateUrl: './descuentos.component.html',
+  styles: `.codigo-desc { padding: 2px 8px; border-radius: 8px; background: var(--primary-soft); color: var(--primary); font-weight: 800; letter-spacing: .04em; }`
 })
 export class DescuentosComponent implements OnInit {
   private readonly api = inject(PagoConfigService);
@@ -31,7 +32,9 @@ export class DescuentosComponent implements OnInit {
     tipo: ['PORCENTAJE' as TipoDescuento, Validators.required],
     valor: [0, [Validators.required, Validators.min(0.01)]],
     aplicaA: ['PENSION' as AplicaA, Validators.required],
-    activo: [true]
+    activo: [true],
+    /** Opcional: si lo tiene, la familia puede canjear el descuento en la matrícula en línea. */
+    codigo: ['', [Validators.pattern(/^[A-Za-z0-9_-]{3,40}$|^$/)]]
   });
 
   ngOnInit(): void {
@@ -57,12 +60,12 @@ export class DescuentosComponent implements OnInit {
   }
 
   protected nuevo(): void {
-    this.form.reset({ nombre: '', tipo: 'PORCENTAJE', valor: 10, aplicaA: 'PENSION', activo: true });
+    this.form.reset({ nombre: '', tipo: 'PORCENTAJE', valor: 10, aplicaA: 'PENSION', activo: true, codigo: '' });
     this.abrir(null);
   }
 
   protected editar(d: Descuento): void {
-    this.form.reset({ nombre: d.nombre, tipo: d.tipo, valor: d.valor, aplicaA: d.aplicaA, activo: d.activo });
+    this.form.reset({ nombre: d.nombre, tipo: d.tipo, valor: d.valor, aplicaA: d.aplicaA, activo: d.activo, codigo: d.codigo ?? '' });
     this.abrir(d);
   }
 
@@ -87,7 +90,7 @@ export class DescuentosComponent implements OnInit {
       this.errorForm.set('Un porcentaje no puede superar 100.');
       return;
     }
-    const body = { ...v, nombre: v.nombre.trim() };
+    const body = { ...v, nombre: v.nombre.trim(), codigo: v.codigo.trim().toUpperCase() || null };
     const e = this.editando();
     this.guardando.set(true);
     (e ? this.api.actualizarDescuento(e.id, body) : this.api.crearDescuento(body)).subscribe({

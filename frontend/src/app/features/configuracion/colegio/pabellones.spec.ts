@@ -1,9 +1,34 @@
 import { Aula } from '../../../core/models/planificacion.model';
-import { FilaCapacidad, aulasLibres, avancePabellon, cambiosCapacidad, capacidadValida, totalCapacidad } from './pabellones.component';
+import { FilaCapacidad, aulasLibres, avancePabellon, cambioSeleccion, cambiosCapacidad, capacidadValida, gradosPorNivel, marcarGrupo, totalCapacidad } from './pabellones.component';
 
 const fila = (id: number, guardada: number, escrita: number): FilaCapacidad => ({
   aula: { id, codigo: 'A-0' + id, nombre: 'Aula', tipo: 'AULA', capacidad: guardada, activo: true } as Aula,
   capacidad: escrita
+});
+
+describe('pabellones: grados de cada pabellón', () => {
+  const g = (id: number, nivelId: number, numero: number) => ({ id, nivelId, nivelNombre: nivelId === 1 ? 'Inicial' : 'Primaria', numero, nombre: `G${id}` });
+
+  it('agrupa los grados por nivel, en orden', () => {
+    const r = gradosPorNivel([g(3, 2, 1), g(2, 1, 2), g(1, 1, 1), g(4, 2, 2)]);
+    expect(r.map(n => n.nivel)).toEqual(['Inicial', 'Primaria']);
+    expect(r[0].grados.map(x => x.id)).toEqual([1, 2]);
+    expect(r[1].grados.map(x => x.id)).toEqual([3, 4]);
+  });
+
+  it('marca o quita un grupo sin tocar los demás ni la selección original', () => {
+    const base = new Set([1, 9]);
+    expect([...marcarGrupo(base, [2, 3], true)].sort()).toEqual([1, 2, 3, 9]);
+    expect([...marcarGrupo(base, [1, 5], false)]).toEqual([9]);
+    expect([...base]).toEqual([1, 9]);
+  });
+
+  it('detecta si cambió la selección respecto de lo guardado', () => {
+    expect(cambioSeleccion(new Set([1, 2]), [2, 1])).toBe(false);
+    expect(cambioSeleccion(new Set([1]), [1, 2])).toBe(true);
+    expect(cambioSeleccion(new Set([1, 3]), [1, 2])).toBe(true);
+    expect(cambioSeleccion(new Set(), [])).toBe(false);
+  });
 });
 
 describe('pabellones: alumnos por aula', () => {

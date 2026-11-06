@@ -2,8 +2,10 @@ package pe.edu.eduspace.planificacion.controller;
 
 import jakarta.validation.Valid;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -12,9 +14,11 @@ import org.springframework.web.bind.annotation.*;
 import pe.edu.eduspace.planificacion.dto.AulaResponse;
 import pe.edu.eduspace.planificacion.dto.AulasPabellonRequest;
 import pe.edu.eduspace.planificacion.dto.CapacidadesPabellonRequest;
+import pe.edu.eduspace.planificacion.dto.GradosPabellonRequest;
 import pe.edu.eduspace.planificacion.dto.PabellonRequest;
 import pe.edu.eduspace.planificacion.dto.PabellonResponse;
 import pe.edu.eduspace.planificacion.entity.Aula;
+import pe.edu.eduspace.planificacion.entity.Grado;
 import pe.edu.eduspace.planificacion.entity.Pabellon;
 import pe.edu.eduspace.planificacion.entity.Seccion;
 import pe.edu.eduspace.planificacion.entity.TipoAula;
@@ -23,6 +27,7 @@ import pe.edu.eduspace.planificacion.repository.SeccionRepository;
 import pe.edu.eduspace.planificacion.exception.BusinessRuleException;
 import pe.edu.eduspace.planificacion.exception.ResourceNotFoundException;
 import pe.edu.eduspace.planificacion.repository.AulaRepository;
+import pe.edu.eduspace.planificacion.repository.GradoRepository;
 import pe.edu.eduspace.planificacion.repository.PabellonRepository;
 import pe.edu.eduspace.planificacion.util.CodigosAula;
 import pe.edu.eduspace.planificacion.util.Respuestas;
@@ -41,6 +46,7 @@ public class PabellonController {
     private final PabellonRepository repository;
     private final AulaRepository aulas;
     private final SeccionRepository secciones;
+    private final GradoRepository grados;
     private final PlanificacionMapper mapper;
 
     @GetMapping
@@ -149,8 +155,27 @@ public class PabellonController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Fija los grados que usan el pabellón (reemplaza la lista anterior). Cada grado debe existir; un grado puede usar varios pabellones.
+     */
+    @PutMapping("/{id}/grados")
+    @Transactional
+    public PabellonResponse fijarGrados(@PathVariable Long id, @Valid @RequestBody GradosPabellonRequest request) {
+        Pabellon p = buscar(id);
+        Set<Long> pedidos = new LinkedHashSet<>(request.gradoIds());
+        List<Long> existentes = grados.findAllById(pedidos).stream().map(Grado::getId).toList();
+        List<Long> faltan = pedidos.stream().filter(g -> !existentes.contains(g)).toList();
+        if (!faltan.isEmpty()) {
+            throw new BusinessRuleException("No existen los grados " + faltan);
+        }
+        p.getGradoIds().clear();
+        p.getGradoIds().addAll(pedidos);
+        return respuesta(repository.save(p));
+    }
+
     private PabellonResponse respuesta(Pabellon p) {
-        return new PabellonResponse(p.getId(), p.getNombre(), p.getCantidadAulas(), aulas.countByPabellonId(p.getId()), aulas.sumaCapacidad(p.getId()));
+        return new PabellonResponse(p.getId(), p.getNombre(), p.getCantidadAulas(), aulas.countByPabellonId(p.getId()), aulas.sumaCapacidad(p.getId()),
+                p.getGradoIds().stream().sorted().toList());
     }
 
     private Pabellon buscar(Long id) {

@@ -1,4 +1,4 @@
-import { Asignacion, Docente } from '../../core/models/planificacion.model';
+import { Asignacion, Docente, MallaGrado, Seccion } from '../../core/models/planificacion.model';
 import { FichaCurso } from '../configuracion/cursos/cursos-estandar';
 
 /** Niveles por los que se filtran los cursos al elegir qué dictará un docente. */
@@ -44,8 +44,11 @@ export const puestoDeArea = (codigo: string | null | undefined): PuestoArea => P
 export const fichasDelNivel = (fichas: readonly FichaCurso[], nivelCodigo: string | null): FichaCurso[] =>
   nivelCodigo ? fichas.filter(f => !f.estandar || f.estandar.niveles.includes(nivelCodigo)) : [...fichas];
 
-/** sin-docente: nadie puede dictarlo · apto: hay quien puede, pero no está asignado a ninguna sección · asignado: ya lo dicta alguien. */
-export type EstadoCobertura = 'asignado' | 'apto' | 'sin-docente';
+/**
+ * sin-docente: nadie puede dictarlo · apto: hay quien puede, pero no está asignado a ninguna sección · parcial: está asignado en algunas
+ * secciones pero faltan otras · asignado: todas las secciones que lo necesitan ya tienen docente.
+ */
+export type EstadoCobertura = 'asignado' | 'parcial' | 'apto' | 'sin-docente';
 
 export interface Cobertura {
   estado: EstadoCobertura;
@@ -53,21 +56,47 @@ export interface Cobertura {
   aptos: number;
   /** Secciones donde ya tiene docente asignado. */
   asignaciones: number;
+  /** Secciones activas del año que lo necesitan (su grado lo tiene en la malla). */
+  necesarias: number;
+  /** De esas, las que ya tienen docente. */
+  cubiertas: number;
 }
 
-/** Para cada curso, si tiene docente: asignado a secciones, solo con docentes aptos, o sin nadie. Devuelve una función por id de curso. */
-export function coberturaCursos(docentes: readonly Docente[], asignaciones: readonly Asignacion[]): (cursoId: number | null | undefined) => Cobertura {
+/** Las secciones activas de cada curso: las de los grados que lo tienen en su malla. */
+export function seccionesPorCurso(
+  secciones: readonly Seccion[], mallas: Readonly<Record<number, MallaGrado | null | undefined>>
+): Map<number, Seccion[]> {
+  const m = new Map<number, Seccion[]>();
+  for (const s of secciones) {
+    if (!s.activo) continue;
+    for (const item of mallas[s.gradoId]?.cursos ?? []) m.set(item.cursoId, [...(m.get(item.cursoId) ?? []), s]);
+  }
+  return m;
+}
+
+/**
+ * Para cada curso, si tiene docente: asignado a todas sus secciones, a algunas, solo con docentes aptos, o sin nadie. Devuelve una función
+ * por id de curso. Sin las secciones (tercer parámetro) basta una asignación para considerarlo asignado.
+ */
+export function coberturaCursos(
+  docentes: readonly Docente[], asignaciones: readonly Asignacion[], secciones?: ReadonlyMap<number, readonly { id: number }[]>
+): (cursoId: number | null | undefined) => Cobertura {
   const aptos = new Map<number, number>();
   for (const d of docentes) {
     if (d.estado !== 'ACTIVO') continue;
     for (const id of new Set(d.cursoIds ?? [])) aptos.set(id, (aptos.get(id) ?? 0) + 1);
   }
-  const asignadas = new Map<number, number>();
-  for (const a of asignaciones) asignadas.set(a.cursoId, (asignadas.get(a.cursoId) ?? 0) + 1);
+  const asignadas = new Map<number, Set<number>>();
+  for (const a of asignaciones) asignadas.set(a.cursoId, (asignadas.get(a.cursoId) ?? new Set<number>()).add(a.seccionId));
   return cursoId => {
     const n = cursoId ? aptos.get(cursoId) ?? 0 : 0;
-    const a = cursoId ? asignadas.get(cursoId) ?? 0 : 0;
-    return { aptos: n, asignaciones: a, estado: a > 0 ? 'asignado' : n > 0 ? 'apto' : 'sin-docente' };
+    const conDocente = cursoId ? asignadas.get(cursoId) ?? new Set<number>() : new Set<number>();
+    const a = conDocente.size;
+    const necesarias = cursoId && secciones ? secciones.get(cursoId) ?? [] : [];
+    const cubiertas = secciones ? necesarias.filter(s => conDocente.has(s.id)).length : a;
+    const estado: EstadoCobertura = a > 0 && (!secciones || necesarias.length === 0 || cubiertas >= necesarias.length) ? 'asignado'
+      : a > 0 ? 'parcial' : n > 0 ? 'apto' : 'sin-docente';
+    return { aptos: n, asignaciones: a, necesarias: necesarias.length, cubiertas, estado };
   };
 }
 
@@ -93,13 +122,14 @@ export function textoCobertura(c: Cobertura): string {
   const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
   switch (c.estado) {
     case 'asignado': return `Con docente · ${plural(c.asignaciones, 'sección', 'secciones')}`;
-    case 'apto': return `${plural(c.aptos, 'docente puede', 'docentes pueden')} dictarlo · sin asignar`;
+    case 'parcial': return `Con docente en ${c.cubiertas} de ${plural(c.necesarias, 'sección', 'secciones')} · faltan ${c.necesarias - c.cubiertas}`;
+    case 'apto': return `${plural(c.aptos, 'docente puede', 'docentes pueden')} dictarlo · sin asignar a ninguna sección`;
     default: return 'Sin docente';
   }
 }
 
 /** Primero lo que no tiene docente (lo urgente), luego lo que tiene aptos sin asignar, al final lo cubierto; respeta el orden de origen dentro de cada grupo. */
 export function sinDocentePrimero<T>(items: readonly T[], coberturaDe: (item: T) => Cobertura): T[] {
-  const peso: Record<EstadoCobertura, number> = { 'sin-docente': 0, apto: 1, asignado: 2 };
+  const peso: Record<EstadoCobertura, number> = { 'sin-docente': 0, apto: 1, parcial: 2, asignado: 3 };
   return items.map((item, i) => ({ item, i, p: peso[coberturaDe(item).estado] })).sort((a, b) => a.p - b.p || a.i - b.i).map(x => x.item);
 }

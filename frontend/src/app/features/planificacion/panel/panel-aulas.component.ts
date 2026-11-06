@@ -48,7 +48,7 @@ export class PanelAulasComponent implements OnInit {
       this.anios.set(r.anios);
       this.niveles.set(r.niveles);
       this.docentes.set((r.docentes?.contenido ?? []).filter(d => d.estado === 'ACTIVO'));
-      this.anio.set(r.anios.find(a => a.estado === 'ACTIVO') ?? r.anios[0] ?? null);
+      this.anio.set(r.anios.find(a => a.estado === 'ACTIVO') ?? null);
       this.cargarAnio();
     });
   }

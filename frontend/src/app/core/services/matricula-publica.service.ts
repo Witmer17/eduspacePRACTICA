@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { InicioMatricula, OfertaMatricula, ResumenMatricula, SolicitudMatricula, Tarjeta } from '../models/matricula-publica.model';
+import { DescuentoVista, InicioMatricula, OfertaMatricula, ResumenMatricula, SolicitudMatricula, Tarjeta } from '../models/matricula-publica.model';
 
 const API = '/api/v1/publico/matricula';
 const TOKEN = 'X-Matricula-Token';
@@ -13,6 +13,11 @@ export class MatriculaPublicaService {
 
   oferta(): Observable<OfertaMatricula> {
     return this.http.get<OfertaMatricula>(`${API}/oferta`);
+  }
+
+  /** Valida un código de descuento (404 si no existe o ya no está vigente). */
+  descuento(codigo: string): Observable<DescuentoVista> {
+    return this.http.get<DescuentoVista>(`${API}/descuento/${encodeURIComponent(codigo)}`);
   }
 
   iniciar(s: SolicitudMatricula): Observable<InicioMatricula> {

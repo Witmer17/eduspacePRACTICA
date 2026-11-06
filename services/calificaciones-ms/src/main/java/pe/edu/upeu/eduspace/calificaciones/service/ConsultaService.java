@@ -60,7 +60,8 @@ public class ConsultaService {
             .orElse("ABIERTO");
 
         List<CriterioResponse> criterios = criterioService.listarPorCursoYPeriodo(periodoId, seccionId, cursoId);
-        List<MatriculaLocal> matriculas = matriculaLocalRepository.findBySeccionId(seccionId);
+        // Solo los matriculados (pagada la matrícula): un pre-matriculado todavía no es alumno de la sección
+        List<MatriculaLocal> matriculas = matriculaLocalRepository.findBySeccionIdAndEstado(seccionId, "MATRICULADO");
         List<Nota> notas = notaRepository.findByPeriodoIdAndSeccionIdAndCursoId(periodoId, seccionId, cursoId);
 
         // Agrupar notas por matriculaId -> (criterioId -> valor)

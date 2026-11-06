@@ -11,9 +11,12 @@ import { AuthService } from '../../core/services/auth.service';
 import { ArbolEstructuraService, HijoMenu } from '../../core/services/arbol-estructura.service';
 import { NotificacionService } from '../../core/services/notificacion.service';
 import { NAV_AULA, usaBarraAula } from '../aula-nav';
-import { HUBS, hubDe } from '../hubs';
-import { MENU, PERSONAL, usaBarraPersonal } from '../menu';
+import { HUBS, SIN_MENU_VERTICAL, hubDe } from '../hubs';
+import { HUBS_CAJA, MENU, PERSONAL, usaBarraPersonal } from '../menu';
 import { AvisoServicioComponent } from '../../shared/components/aviso-servicio/aviso-servicio.component';
+import { SinPeriodoActivoComponent } from '../../shared/components/sin-periodo-activo/sin-periodo-activo.component';
+import { AnioActivoService } from '../../core/services/anio-activo.service';
+import { dependeDelAnioActivo } from '../../core/utils/rutas-del-anio';
 
 /** Enlace de la barra superior: con `prefijos` se resalta por rutas (aula); con `hub`, por espacio de trabajo (personal). */
 interface EnlaceSuperior {
@@ -26,7 +29,7 @@ interface EnlaceSuperior {
 
 @Component({
   selector: 'app-shell',
-  imports: [RouterLink, RouterOutlet, AvisoServicioComponent],
+  imports: [RouterLink, RouterOutlet, AvisoServicioComponent, SinPeriodoActivoComponent],
   templateUrl: './shell.component.html',
   styleUrl: './shell.component.css'
 })
@@ -57,7 +60,15 @@ export class ShellComponent {
     { initialValue: this.router.url }
   );
 
-  private readonly pestanaVisible = (p: { roles: string[]; soloEduspace?: boolean }) =>
+  private readonly anioActivo = inject(AnioActivoService);
+  /** La pantalla abierta muestra información del periodo activo y no hay ninguno: se avisa (y la pantalla sale vacía). */
+  protected readonly sinPeriodo = computed(() => dependeDelAnioActivo(this.url()) && this.anioActivo.hayActivo() === false);
+
+  private readonly revisarPeriodo = effect(() => {
+    if (dependeDelAnioActivo(this.url())) untracked(() => this.anioActivo.refrescar());
+  });
+
+  private readonly pestanaVisible =(p: { roles: string[]; soloEduspace?: boolean }) =>
     this.auth.tieneAlgunRol(p.roles) && !(p.soloEduspace && this.auth.esKeycloak);
 
   /** Espacio de trabajo de la pantalla abierta, con solo las pestañas que el rol puede usar. */
@@ -65,6 +76,12 @@ export class ShellComponent {
     const h = hubDe(this.url());
     if (!h) return null;
     return { hub: h.hub, activa: h.pestana.ruta, pestanas: h.hub.pestanas.filter(this.pestanaVisible) };
+  });
+
+  /** El menú vertical de la barra superior: no lo llevan los espacios de una sola página (Caja). */
+  protected readonly menuVertical = computed(() => {
+    const h = this.hubActual();
+    return h && !SIN_MENU_VERTICAL.includes(h.hub.id) ? h : null;
   });
 
   /** Un ítem suelto se resalta en su ruta; la entrada de un espacio de trabajo, en cualquiera de sus pestañas. */
@@ -93,13 +110,17 @@ export class ShellComponent {
   protected readonly barraSuperior = computed(() => this.esAula() || this.esPersonal());
 
   /**
-   * Opciones de la barra del personal: Inicio, Personal (personas contratadas, su pago y asistencia, cuentas y roles), Configuración (información del colegio)
+   * Opciones de la barra del personal: Inicio, Alumnos (alumnos y apoderados, matrículas, asistencia, notas y cuentas), Personal (personas contratadas, su pago y asistencia, cuentas y roles), Configuración (información del colegio)
    * y Apertura de periodo (todo lo necesario para abrir un año escolar).
    * Las demás pantallas siguen existiendo (Ctrl+K y sus rutas); se irán ubicando en el nuevo diseño.
    */
   protected readonly navPersonal = computed(() => {
     const todos = this.menu().flatMap(g => g.items);
-    return [todos.find(i => i.ruta === '/inicio'), todos.find(i => i.hub === 'personal'), todos.find(i => i.hub === 'configuracion'), todos.find(i => i.hub === 'apertura')]
+    // Caja (sin rol de administración): Inicio, Alumnos y Personal de su propia barra.
+    if (!this.auth.tieneAlgunRol(PERSONAL)) {
+      return HUBS_CAJA.map(id => todos.find(i => i.hub === id)).filter((i): i is NonNullable<typeof i> => !!i);
+    }
+    return [todos.find(i => i.ruta === '/inicio' || i.ruta === '/secretaria'), todos.find(i => i.hub === 'alumnos'), todos.find(i => i.hub === 'matricula'), todos.find(i => i.hub === 'personal'), todos.find(i => i.hub === 'configuracion'), todos.find(i => i.hub === 'apertura')]
       .filter((i): i is NonNullable<typeof i> => !!i);
   });
 

@@ -9,6 +9,7 @@ import pe.edu.upeu.eduspace.pago.config.PagoProperties;
 import pe.edu.upeu.eduspace.pago.entity.*;
 import pe.edu.upeu.eduspace.pago.event.MatriculaEvent;
 import pe.edu.upeu.eduspace.pago.repository.*;
+import pe.edu.upeu.eduspace.pago.util.PlanPago;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -107,33 +108,44 @@ public class GeneradorCuotasService {
         }
 
         Tarifa tarifa = optTarifa.get();
-        short totalCuotas = tarifa.getNumCuotas() != null ? tarifa.getNumCuotas() : 10;
+        short mesesTarifa = tarifa.getNumCuotas() != null ? tarifa.getNumCuotas() : 10;
         short mesInicio = tarifa.getMesInicio() != null ? tarifa.getMesInicio() : 3;
         short diaVenc = tarifa.getDiaVencimiento() != null ? tarifa.getDiaVencimiento() : 5;
-        // El monto de la tarifa es el TOTAL de la pensión del año; se reparte en num_cuotas con
-        // redondeo a 2 decimales y la diferencia se carga a la última cuota.
-        BigDecimal montoCuotaBase = tarifa.getMonto().divide(BigDecimal.valueOf(totalCuotas), 2, RoundingMode.DOWN);
-        BigDecimal acumulado = BigDecimal.ZERO;
+        // La forma de pago se acordó al matricular. El monto de la tarifa es el TOTAL de la pensión del año: se reparte en las cuotas del plan
+        // (mensual, bimestral, semestral o anual) en proporción a los meses que cubre cada una; la diferencia de centavos va a la última.
+        PlanPago plan = PlanPago.de(event.getPlanPago() != null ? event.getPlanPago() : matricula.getPlanPago());
+        int[] meses = plan.mesesPorCuota(mesesTarifa);
+        List<BigDecimal> montos = plan.repartir(tarifa.getMonto(), mesesTarifa);
+        BigDecimal descuentoPlan = switch (plan) {
+            case SEMESTRAL -> pagoProperties.getDescuentoPlanSemestral();
+            case ANUAL -> pagoProperties.getDescuentoPlanAnual();
+            default -> BigDecimal.ZERO;
+        };
 
         int anio = anioCalendario(event.getAnioId());
+        int mesesAntes = 0;
 
-        for (short i = 1; i <= totalCuotas; i++) {
-            final short numCuota = i;
-            BigDecimal montoBasePorCuota = i == totalCuotas ? tarifa.getMonto().subtract(acumulado) : montoCuotaBase;
-            acumulado = acumulado.add(montoBasePorCuota);
+        for (int idx = 0; idx < meses.length; idx++) {
+            final short numCuota = (short) (idx + 1);
+            BigDecimal montoBasePorCuota = montos.get(idx);
+            int mesDeLaCuota = mesInicio + mesesAntes;          // la cuota vence al empezar los meses que cubre
+            int mesFinal = mesDeLaCuota + meses[idx] - 1;
+            mesesAntes += meses[idx];
             if (cuotaRepository.findByMatriculaMatriculaIdAndConceptoIdAndNumeroCuota(event.getMatriculaId(), conceptoPension.getId(), numCuota).isPresent()) {
                 continue; // ya generada
             }
 
-            int mes = mesInicio + (i - 1);
+            int mes = mesDeLaCuota;
             int anioCuota = anio;
-            if (mes > 12) {
+            while (mes > 12) {
                 mes -= 12;
                 anioCuota += 1;
             }
 
             LocalDate fechaVenc = LocalDate.of(anioCuota, mes, Math.min(diaVenc, 28));
-            BigDecimal descCuota = calcularDescuento(event.getAlumnoId(), event.getAnioId(), "PENSION", montoBasePorCuota);
+            // Descuentos del alumno (hermanos, etc.) más el del plan, sin pasar del monto de la cuota
+            BigDecimal descCuota = calcularDescuento(event.getAlumnoId(), event.getAnioId(), "PENSION", montoBasePorCuota)
+                .add(PlanPago.descuentoDelPlan(montoBasePorCuota, descuentoPlan)).min(montoBasePorCuota);
             BigDecimal totalCuota = montoBasePorCuota.subtract(descCuota).max(BigDecimal.ZERO);
 
             Cuota cuota = Cuota.builder()
@@ -142,7 +154,7 @@ public class GeneradorCuotasService {
                 .anioId(event.getAnioId())
                 .concepto(conceptoPension)
                 .tarifa(tarifa)
-                .descripcion(String.format("Pensión %02d/%d", mes, anioCuota))
+                .descripcion(descripcionPension(plan, numCuota, mes, mesFinal, anioCuota, anio))
                 .numeroCuota(numCuota)
                 .montoBase(montoBasePorCuota)
                 .descuento(descCuota)
@@ -158,7 +170,17 @@ public class GeneradorCuotasService {
 
             cuotaRepository.save(cuota);
         }
-        log.info("Generadas {} cuotas de pensión para matrícula {}", totalCuotas, event.getMatriculaId());
+        log.info("Generadas {} cuotas de pensión ({}) para matrícula {}", meses.length, plan, event.getMatriculaId());
+    }
+
+    /** «Pensión 03/2027», «Pensión 03–04/2027», «Pensión 1.er semestre 2027» o «Pensión anual 2027». */
+    static String descripcionPension(PlanPago plan, int numCuota, int mes, int mesFinal, int anioCuota, int anioBase) {
+        return switch (plan) {
+            case MENSUAL -> String.format("Pensión %02d/%d", mes, anioCuota);
+            case BIMESTRAL -> String.format("Pensión %02d–%02d/%d", mes, ((mesFinal - 1) % 12) + 1, anioCuota);
+            case SEMESTRAL -> String.format("Pensión %s semestre %d", numCuota == 1 ? "1.er" : "2.º", anioBase);
+            case ANUAL -> "Pensión anual " + anioBase;
+        };
     }
 
     @Transactional
@@ -222,7 +244,7 @@ public class GeneradorCuotasService {
                 MatriculaEvent ev = MatriculaEvent.builder()
                     .matriculaId(m.getMatriculaId()).alumnoId(m.getAlumnoId()).alumnoNombre(m.getAlumnoNombre())
                     .anioId(m.getAnioId()).nivelId(m.getNivelId()).gradoId(m.getGradoId()).seccionId(m.getSeccionId())
-                    .estado(m.getEstado()).build();
+                    .estado(m.getEstado()).planPago(m.getPlanPago()).build();
                 String tipo = tarifa.getConcepto().getTipo();
                 if ("MATRICULA".equals(tipo)) generarCuotaMatricula(ev);
                 else if ("PENSION".equals(tipo) && "MATRICULADO".equals(m.getEstado())) generarCuotasPension(ev);
@@ -233,7 +255,8 @@ public class GeneradorCuotasService {
         }
     }
 
-    private BigDecimal calcularDescuento(Long alumnoId, Long anioId, String tipoAplica, BigDecimal montoBase) {
+    /** El descuento que le corresponde a un alumno sobre un monto base (lo usan las cuotas al crearse y la aprobación de una solicitud). */
+    BigDecimal calcularDescuento(Long alumnoId, Long anioId, String tipoAplica, BigDecimal montoBase) {
         List<DescuentoAlumno> descuentos = descuentoAlumnoRepository.findDescuentosVigentesConDetalle(alumnoId, anioId);
         BigDecimal totalDescuento = BigDecimal.ZERO;
 

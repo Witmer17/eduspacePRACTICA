@@ -41,7 +41,7 @@ public class Pago {
 
     @Column(nullable = false, length = 10)
     @Builder.Default
-    private String estado = "CONFIRMADO"; // CONFIRMADO, ANULADO
+    private String estado = "CONFIRMADO"; // CONFIRMADO, ANULADO; PENDIENTE y RECHAZADO en pagos de apoderados por aprobar
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "caja_sesion_id")
@@ -62,6 +62,20 @@ public class Pago {
 
     @Column(name = "motivo_anulacion", length = 300)
     private String motivoAnulacion;
+
+    /** Quien aprobó o rechazó el pago de un apoderado. */
+    @Column(name = "aprobado_por")
+    private Long aprobadoPor;
+
+    @Column(name = "aprobado_en")
+    private LocalDateTime aprobadoEn;
+
+    @Column(name = "motivo_rechazo", length = 300)
+    private String motivoRechazo;
+
+    /** RECIBO o BOLETA, el que pidió el apoderado: se emite al aprobar. */
+    @Column(name = "tipo_comprobante", length = 10)
+    private String tipoComprobante;
 
     @Column(name = "idempotency_key", length = 80)
     private String idempotencyKey;

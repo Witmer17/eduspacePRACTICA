@@ -30,8 +30,11 @@ import { NotificationService } from '../../../core/services/notification.service
 import { mensajeError } from '../../../core/utils/errores';
 import { ModalComponent } from '../../../shared/components/modal/modal.component';
 import { PageHeaderComponent } from '../../../shared/components/page-header/page-header.component';
+import { DatosDocumento, NOMBRE_REQUERIDO, TipoRequerido } from '../../documentos/documentos';
+import { DocumentosDatosService } from '../../documentos/documentos-datos.service';
+import { datosFaltantes, enumerar, valorODash } from './datos-alumno';
 
-type Dialogo = 'ninguno' | 'datos' | 'estado' | 'vinculo' | 'nuevoVinculo' | 'salud';
+type Dialogo = 'ninguno' | 'datos' | 'estado' | 'vinculo' | 'nuevoVinculo' | 'salud' | 'generar';
 type EstadoDoc = 'FALTA' | 'SIN_VERIFICAR' | 'VERIFICADO';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -42,7 +45,15 @@ const CLASE_ESTADO: Record<EstadoAlumno, string> = {
 @Component({
   selector: 'app-alumno-detalle',
   imports: [ReactiveFormsModule, RouterLink, DatePipe, ModalComponent, PageHeaderComponent],
-  templateUrl: './alumno-detalle.component.html'
+  templateUrl: './alumno-detalle.component.html',
+  styles: `
+    .falta-dato { color: var(--warn); font-style: italic; }
+    .gen-lista { display: flex; flex-direction: column; gap: 10px; }
+    .gen-fila { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 14px; border: 1.5px solid var(--line-2); border-radius: 12px; }
+    .gen-apagada { background: var(--bg); }
+    .gen-apagada strong { color: var(--ink-2); }
+    .gen-motivo { margin-top: 4px; font-size: .8rem; color: var(--warn); font-weight: 600; }
+  `
 })
 export class AlumnoDetalleComponent {
   private readonly api = inject(AlumnoService);
@@ -51,6 +62,7 @@ export class AlumnoDetalleComponent {
   private readonly fb = inject(FormBuilder);
   private readonly cuentas = inject(CuentasService);
   private readonly usuarios = inject(UsuarioService);
+  private readonly generador = inject(DocumentosDatosService);
   /** Las cuentas se administran solo con el login propio y solo el ADMIN. */
   private readonly sesion = inject(AuthService);
   protected readonly puedeCuentas = computed(() => this.sesion.isAdmin() && !this.sesion.esKeycloak);
@@ -91,6 +103,56 @@ export class AlumnoDetalleComponent {
     })
   );
   protected readonly expedienteCompleto = computed(() => this.checklist().every(c => c.estado === 'VERIFICADO'));
+
+  // Datos personales: qué falta (se avisa y se ofrece completarlos)
+  protected readonly faltantes = computed(() => (this.alumno() ? datosFaltantes(this.alumno()!) : []));
+  protected readonly enumerar = enumerar;
+  protected readonly valor = valorODash;
+
+  // Generar los documentos requeridos que faltan (DNI, partida de nacimiento, ficha SIAGIE) con los datos registrados del alumno
+  protected readonly datosDoc = signal<DatosDocumento | null>(null);
+  protected readonly cargandoDoc = signal(false);
+  protected readonly generando = signal<TipoRequerido | 'TODOS' | null>(null);
+  protected readonly nombreRequerido = NOMBRE_REQUERIDO;
+  /** Los requeridos con su estado (DNI, partida de nacimiento y ficha SIAGIE, con el tipo que usa el generador). */
+  protected readonly requeridos = computed(() => this.checklist().map(c => ({ tipo: c.tipo as TipoRequerido, estado: c.estado })));
+  protected readonly faltan = computed(() => this.requeridos().filter(c => c.estado === 'FALTA').map(c => c.tipo));
+
+  protected abrirGenerador(): void {
+    this.datosDoc.set(null);
+    this.errorForm.set(null);
+    this.cargandoDoc.set(true);
+    this.abrir('generar');
+    this.generador.cargar(this.alumnoId()).subscribe({
+      next: d => { this.datosDoc.set(d); this.cargandoDoc.set(false); },
+      error: e => { this.cargandoDoc.set(false); this.errorForm.set(mensajeError(e, 'No se pudo reunir la información del alumno.')); }
+    });
+  }
+
+  /** Genera y sube los documentos pedidos, de uno en uno, y recarga la lista del expediente. */
+  protected generarRequeridos(tipos: TipoRequerido[]): void {
+    const d = this.datosDoc();
+    if (!d || !tipos.length) return;
+    this.generando.set(tipos.length === 1 ? tipos[0] : 'TODOS');
+    this.errorForm.set(null);
+    const subir = (i: number): void => {
+      if (i >= tipos.length) {
+        this.generando.set(null);
+        this.avisos.success(tipos.length === 1 ? 'Documento generado y guardado en el expediente.' : `${tipos.length} documentos generados y guardados en el expediente.`);
+        this.recargarDocumentos(this.alumnoId());
+        return;
+      }
+      this.generador.guardarRequerido(tipos[i], d).subscribe({
+        next: () => subir(i + 1),
+        error: e => {
+          this.generando.set(null);
+          this.errorForm.set(mensajeError(e, 'No se pudo guardar el documento.'));
+          this.recargarDocumentos(this.alumnoId());
+        }
+      });
+    };
+    subir(0);
+  }
 
   protected readonly formDatos = this.fb.nonNullable.group({
     tipoDocumento: ['DNI'],

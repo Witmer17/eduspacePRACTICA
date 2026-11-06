@@ -95,6 +95,7 @@ const marcado = (e: Event): boolean => (e.target as HTMLInputElement).checked;
           <div class="toolbar">
             <button type="button" class="btn btn-sm" (click)="seleccionarListas()">Marcar las listas</button>
             @for (n of niveles(); track n.id) { <button type="button" class="btn btn-sm" (click)="seleccionarNivel(n.id)">Todas de {{ n.nombre }}</button> }
+            @for (g of gradosConSecciones(); track g.id) { <button type="button" class="btn btn-sm" (click)="seleccionarGrado(g.id)">Solo {{ g.nombre }}</button> }
             <button type="button" class="btn btn-sm" (click)="seleccion.set(vacio)">Quitar marcas</button>
           </div>
         </div>
@@ -107,7 +108,7 @@ const marcado = (e: Event): boolean => (e.target as HTMLInputElement).checked;
                   <td><input type="checkbox" [checked]="seleccion().has(f.seccionId)" (change)="alternarSeccion(f.seccionId)" [attr.aria-label]="'Elegir ' + f.nombre" /></td>
                   <td><strong>{{ f.nombre }}</strong><br /><span class="muted">{{ f.aula ?? 'Sin aula' }} · {{ f.turno === 'MANANA' ? 'mañana' : 'tarde' }}</span></td>
                   <td>{{ f.cursosMalla }} cursos · {{ f.horasMalla }}/{{ f.espacios }} h</td>
-                  <td>@if (f.sinDocente.length === 0) { <span class="badge badge-ok">Completos</span> } @else { <span class="badge badge-warn">Faltan {{ f.sinDocente.length }}</span> }</td>
+                  <td>@if (f.cursosMalla === 0) { <span class="muted">Sin cursos</span> } @else if (f.sinDocente.length === 0) { <span class="badge badge-ok">Completos</span> } @else { <span class="badge badge-warn">Faltan {{ f.sinDocente.length }}</span> }</td>
                   <td>{{ f.clasesProgramadas }}</td>
                   <td>
                     @if (f.lista) { <span class="badge badge-ok">Lista</span> } @else {
@@ -214,7 +215,7 @@ export class HorarioAutoComponent implements OnInit {
     this.api.cursos().subscribe(c => this.cursos.set(c.filter(x => x.activo)));
     this.api.anios().subscribe(a => {
       this.anios.set(a);
-      this.anioId.set((a.find(x => x.estado === 'ACTIVO') ?? a[0])?.id ?? 0);
+      this.anioId.set(a.find(x => x.estado === 'ACTIVO')?.id ?? 0);
       this.cargarPreparacion();
     });
   }
@@ -321,6 +322,18 @@ export class HorarioAutoComponent implements OnInit {
 
   protected seleccionarNivel(nivelId: number): void {
     this.seleccion.set(new Set(this.filas().filter(f => f.nivelId === nivelId).map(f => f.seccionId)));
+  }
+
+  /** Marca todas las secciones de un grado (ej. «3.º A», «3.º B») para armarlas juntas y que queden coherentes entre sí. */
+  protected seleccionarGrado(gradoId: number): void {
+    this.seleccion.set(new Set(this.filas().filter(f => f.gradoId === gradoId).map(f => f.seccionId)));
+  }
+
+  /** Grados que tienen al menos una sección activa en el año. */
+  protected gradosConSecciones(): { id: number; nombre: string }[] {
+    const vistos = new Map<number, string>();
+    for (const f of this.filas()) vistos.set(f.gradoId, f.gradoNombre);
+    return [...vistos].map(([id, nombre]) => ({ id, nombre }));
   }
 
   // ---------------------------------------------------------------- 3. generar

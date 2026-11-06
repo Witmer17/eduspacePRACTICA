@@ -20,6 +20,7 @@ import {
   VinculoApoderadoRequest,
   VinculoUpdate
 } from '../models/alumno.model';
+import { Hijo } from '../models/familia.model';
 import { Page } from '../models/page.model';
 
 const API = '/api/v1';
@@ -54,6 +55,12 @@ export class AlumnoService {
 
   obtener(id: number): Observable<Alumno> {
     return this.http.get<Alumno>(`${API}/alumnos/${id}`);
+  }
+
+  /** Nombre, código y documento de varios alumnos a la vez (para quien cobra o busca; no trae el expediente). */
+  resumenes(ids: number[]): Observable<AlumnoResumen[]> {
+    const params = new HttpParams().set('ids', ids.join(','));
+    return this.http.get<AlumnoResumen[]>(`${API}/alumnos/resumen`, { params });
   }
 
   crear(body: AlumnoCreate): Observable<Alumno> {
@@ -92,6 +99,11 @@ export class AlumnoService {
 
   quitarVinculo(alumnoId: number, vinculoId: number): Observable<void> {
     return this.http.delete<void>(`${API}/alumnos/${alumnoId}/apoderados/${vinculoId}`);
+  }
+
+  /** Los alumnos vinculados a un apoderado (con su parentesco). */
+  hijosDeApoderado(id: number): Observable<Hijo[]> {
+    return this.http.get<Hijo[]>(`${API}/apoderados/${id}/hijos`);
   }
 
   actualizarApoderado(id: number, body: ApoderadoRequest): Observable<Apoderado> {

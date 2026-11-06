@@ -14,6 +14,8 @@ import lombok.Setter;
 @Setter
 public class PagoPersonal {
     public static final String PENDIENTE = "PENDIENTE";
+    /** Caja ya solicitó el pago (medio y referencia) y espera que el administrador lo apruebe. */
+    public static final String POR_APROBAR = "POR_APROBAR";
     public static final String PAGADO = "PAGADO";
     public static final String SUELDO = "SUELDO";
 
@@ -37,6 +39,13 @@ public class PagoPersonal {
     private String medio;
     private String referencia;
     private LocalDateTime creadoEn;
+    /** Quien pidió el pago (caja) y quien lo aprobó o rechazó (administrador). */
+    private Long solicitadoPor;
+    private LocalDateTime solicitadoEn;
+    private Long aprobadoPor;
+    private LocalDateTime aprobadoEn;
+    /** Por qué el administrador devolvió el pago a pendiente; se borra al volver a solicitarlo. */
+    private String motivoRechazo;
 
     @PrePersist
     void onCreate() {

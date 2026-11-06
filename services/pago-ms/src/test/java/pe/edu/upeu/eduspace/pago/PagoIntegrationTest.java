@@ -440,6 +440,8 @@ class PagoIntegrationTest extends PostgresIntegrationTestBase {
         tarifa("MATRICULA", "350.00", 1, 3);
         matriculaCreada(1, 1);
         matriculaCreada(2, 2);
+        // la matrícula tiene su propio camino de pago (orden + pasarela); aquí se prueba el pago en línea de una cuota cualquiera
+        jdbc.update("update cuotas set concepto_id = (select id from conceptos_pago where codigo = 'MATERIAL')");
         when(alumnosGateway.hijos(700L)).thenReturn(List.of(new AlumnoContactoResponse.HijoResumen(1L, "A-1", "Alumno 1", "ACTIVO", "PADRE")));
         long cuotaPropia = jdbc.queryForObject("select id from cuotas where alumno_id = 1", Long.class);
         long cuotaAjena = jdbc.queryForObject("select id from cuotas where alumno_id = 2", Long.class);
@@ -451,12 +453,75 @@ class PagoIntegrationTest extends PostgresIntegrationTestBase {
             .andExpect(status().isForbidden());
         mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON).content(pago.apply(1L, cuotaAjena)))
             .andExpect(status().isForbidden());
-        // la cuota del propio hijo se paga y queda registrada
-        mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON).content(pago.apply(1L, cuotaPropia)))
+        // la cuota del propio hijo se informa, pero NO se confirma: queda por aprobar en caja, sin comprobante
+        String respuesta = mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON).content(pago.apply(1L, cuotaPropia)))
             .andExpect(status().isCreated()).andExpect(jsonPath("$.medio").value("ONLINE_SIMULADO"))
+            .andExpect(jsonPath("$.estado").value("PENDIENTE")).andExpect(jsonPath("$.comprobante").doesNotExist())
+            .andReturn().getResponse().getContentAsString();
+        long pagoId = new tools.jackson.databind.ObjectMapper().readTree(respuesta).get("id").asLong();
+        org.junit.jupiter.api.Assertions.assertEquals("PENDIENTE", jdbc.queryForObject("select estado from cuotas where id = ?", String.class, cuotaPropia));
+        org.junit.jupiter.api.Assertions.assertEquals("PENDIENTE", jdbc.queryForObject("select estado from cuotas where id = ?", String.class, cuotaAjena));
+
+        // la misma cuota no se puede informar dos veces mientras esté en revisión
+        mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON)
+                .content(pago.apply(1L, cuotaPropia).replace("k-1-", "otra-")))
+            .andExpect(status().is4xxClientError());
+
+        // el apoderado la ve en revisión; la lista de caja la incluye; secretaría y docentes no aprueban
+        mvc.perform(get("/api/v1/pagos/mias/pendientes").with(usuario(700, "APODERADO")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/v1/pagos/por-aprobar").with(usuario(9, "CAJERO")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(post("/api/v1/pagos/" + pagoId + "/aprobar").with(usuario(8, "SECRETARIA"))).andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/pagos/por-aprobar").with(usuario(700, "APODERADO"))).andExpect(status().isForbidden());
+
+        // caja aprueba: se confirma, se aplica a la cuota y sale el comprobante; no se aprueba dos veces
+        mvc.perform(post("/api/v1/pagos/" + pagoId + "/aprobar").with(usuario(9, "CAJERO")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("CONFIRMADO"))
             .andExpect(jsonPath("$.comprobante.numeroCompleto").isNotEmpty());
         org.junit.jupiter.api.Assertions.assertEquals("PAGADA", jdbc.queryForObject("select estado from cuotas where id = ?", String.class, cuotaPropia));
-        org.junit.jupiter.api.Assertions.assertEquals("PENDIENTE", jdbc.queryForObject("select estado from cuotas where id = ?", String.class, cuotaAjena));
+        mvc.perform(post("/api/v1/pagos/" + pagoId + "/aprobar").with(usuario(9, "CAJERO"))).andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    void laMatriculaNoSePagaEnLineaComoCuotaSuelta() throws Exception {
+        tarifa("MATRICULA", "350.00", 1, 3);
+        matriculaCreada(1, 1);
+        when(alumnosGateway.hijos(700L)).thenReturn(List.of(new AlumnoContactoResponse.HijoResumen(1L, "A-1", "Alumno 1", "ACTIVO", "PADRE")));
+        long cuota = jdbc.queryForObject("select id from cuotas where alumno_id = 1", Long.class);
+        String cuerpo = "{\"alumnoId\":1,\"montoTotal\":350.00,\"medio\":\"ONLINE_SIMULADO\",\"idempotencyKey\":\"mat-1\","
+            + "\"detalles\":[{\"cuotaId\":" + cuota + ",\"montoAplicado\":350.00}]}";
+        mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+            .andExpect(status().is4xxClientError());
+        org.junit.jupiter.api.Assertions.assertEquals(0, jdbc.queryForObject("select count(*) from pagos", Integer.class));
+    }
+
+    @Test
+    void cajaRechazaElPagoDelApoderadoConMotivoYLaCuotaQuedaPendiente() throws Exception {
+        tarifa("MATRICULA", "350.00", 1, 3);
+        matriculaCreada(1, 1);
+        // la matrícula tiene su propio camino de pago (orden + pasarela); aquí se prueba el pago en línea de una cuota cualquiera
+        jdbc.update("update cuotas set concepto_id = (select id from conceptos_pago where codigo = 'MATERIAL')");
+        when(alumnosGateway.hijos(700L)).thenReturn(List.of(new AlumnoContactoResponse.HijoResumen(1L, "A-1", "Alumno 1", "ACTIVO", "PADRE")));
+        long cuota = jdbc.queryForObject("select id from cuotas where alumno_id = 1", Long.class);
+        String cuerpo = "{\"alumnoId\":1,\"montoTotal\":350.00,\"medio\":\"ONLINE_SIMULADO\",\"idempotencyKey\":\"rech-1\","
+            + "\"detalles\":[{\"cuotaId\":" + cuota + ",\"montoAplicado\":350.00}]}";
+        String respuesta = mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long pagoId = new tools.jackson.databind.ObjectMapper().readTree(respuesta).get("id").asLong();
+
+        // el motivo es obligatorio
+        mvc.perform(post("/api/v1/pagos/" + pagoId + "/rechazar").with(usuario(9, "CAJERO")).contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/v1/pagos/" + pagoId + "/rechazar").with(usuario(9, "CAJERO")).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"motivo\":\"No llegó el depósito\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RECHAZADO")).andExpect(jsonPath("$.motivoRechazo").value("No llegó el depósito"));
+        org.junit.jupiter.api.Assertions.assertEquals("PENDIENTE", jdbc.queryForObject("select estado from cuotas where id = ?", String.class, cuota));
+        // el apoderado ve el rechazo con su motivo y la cuota se puede volver a pagar
+        mvc.perform(get("/api/v1/pagos/mias/pendientes").with(usuario(700, "APODERADO")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].estado").value("RECHAZADO"));
+        mvc.perform(post("/api/v1/pagos/online").with(usuario(700, "APODERADO")).contentType(MediaType.APPLICATION_JSON).content(cuerpo.replace("rech-1", "rech-2")))
+            .andExpect(status().isCreated());
     }
 
     @Test

@@ -1,9 +1,9 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Observable, forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { Campania } from '../../core/models/matricula.model';
-import { MallaGrado } from '../../core/models/planificacion.model';
+import { Anio, MallaGrado } from '../../core/models/planificacion.model';
 import { AuthService } from '../../core/services/auth.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { MatriculaService } from '../../core/services/matricula.service';
@@ -12,7 +12,14 @@ import { PagoConfigService } from '../../core/services/pago-config.service';
 import { PlanificacionService } from '../../core/services/planificacion.service';
 import { mensajeError } from '../../core/utils/errores';
 import { ConfigHeroComponent } from '../../shared/components/config-hero/config-hero.component';
+import { AperturaAsistenteComponent } from './apertura-asistente.component';
 import { DatosApertura, EstadoPaso, PasoApertura, anioPorAbrir, avanceApertura, evaluarApertura, sePuedeActivar, siguientePaso } from './apertura';
+
+/** El año a revisar: el elegido (si no está cerrado); si no, el activo; y sin activo, el próximo por abrir. */
+function resolverAnio(anios: readonly Anio[], elegidoId: number | null): Anio | null {
+  const abiertos = anios.filter(a => a.estado !== 'CERRADO');
+  return abiertos.find(a => a.id === elegidoId) ?? abiertos.find(a => a.estado === 'ACTIVO') ?? anioPorAbrir(anios);
+}
 
 /** Un servicio apagado o sin permiso no debe tumbar la pantalla: ese paso queda «sin datos». */
 const seguro = <T>(obs: Observable<T>): Observable<T | null> => obs.pipe(catchError(() => of(null)));
@@ -24,7 +31,7 @@ const seguro = <T>(obs: Observable<T>): Observable<T | null> => obs.pipe(catchEr
  */
 @Component({
   selector: 'app-apertura',
-  imports: [RouterLink, ConfigHeroComponent],
+  imports: [RouterLink, ConfigHeroComponent, AperturaAsistenteComponent],
   template: `
     <div class="page n-primaria">
       <app-config-hero [titulo]="anio() ? 'Apertura de ' + anio()!.nombre : 'Apertura de periodo'"
@@ -35,6 +42,42 @@ const seguro = <T>(obs: Observable<T>): Observable<T | null> => obs.pipe(catchEr
           <span>{{ avance().listos }} de {{ avance().total }} pasos</span>
         </div>
       </app-config-hero>
+
+      <!-- El asistente: todo lo de la apertura en una sola ventana, cada paso se hace ahí o se omite -->
+      @if (esAdmin()) {
+        <section class="asistente" aria-label="Asistente de apertura">
+          <div>
+            <h2>Abre el periodo en una sola ventana</h2>
+            <p>El asistente te lleva por el año, los periodos, los feriados, las secciones, los docentes, las tarifas y la campaña, hasta dejar todo listo para que los alumnos se matriculen. Cada paso se hace ahí mismo o se omite.</p>
+          </div>
+          <button type="button" class="btn btn-primary btn-grande" (click)="asistente.set(true)">Abrir el asistente</button>
+        </section>
+      } @else {
+        <div class="aviso aviso-warn">Solo el administrador puede abrir el periodo; tú puedes consultar lo que falta.</div>
+      }
+
+      <!-- Sin año activo: nadie puede matricularse; el botón lleva al asistente de apertura -->
+      @if (!cargando() && !hayActivo()) {
+        <section class="sin-activo" aria-label="Sin año activo">
+          <div>
+            <h2>No hay un año activo</h2>
+            <p>{{ aniosVisibles().length ? 'Hay años planificados, pero ninguno está abierto: los alumnos no pueden matricularse en línea.' : 'Todavía no hay un año para abrir.' }}</p>
+          </div>
+          @if (esAdmin()) { <button type="button" class="btn btn-primary btn-grande" (click)="asistente.set(true)">Aperturar periodo</button> }
+        </section>
+      }
+
+      <!-- Los años que no están cerrados: se elige cuál revisar (por defecto, el activo) -->
+      @if (aniosVisibles().length) {
+        <div class="anios" role="radiogroup" aria-label="Año a revisar">
+          <span class="anios-et">Ver los pasos de:</span>
+          @for (a of aniosVisibles(); track a.id) {
+            <button type="button" role="radio" class="anio-chip" [class.on]="anio()?.id === a.id" [attr.aria-checked]="anio()?.id === a.id" [disabled]="cargando()" (click)="elegirAnio(a.id)">
+              <strong>{{ a.nombre }}</strong><small>{{ a.estado === 'ACTIVO' ? 'activo' : 'planificado' }}</small>
+            </button>
+          }
+        </div>
+      }
 
       @if (cargando()) { <p class="muted">Revisando el año…</p> }
 
@@ -93,6 +136,8 @@ const seguro = <T>(obs: Observable<T>): Observable<T | null> => obs.pipe(catchEr
         }
       </ol>
 
+      @if (asistente()) { <app-apertura-asistente (cerrar)="cerrarAsistente()" (cambio)="cambioEnAsistente = true" /> }
+
       <!-- Abrir el año -->
       @if (anio(); as a) {
         @if (a.estado === 'PLANIFICADO') {
@@ -116,6 +161,21 @@ const seguro = <T>(obs: Observable<T>): Observable<T | null> => obs.pipe(catchEr
     </div>
   `,
   styles: `
+    .sin-activo { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; border-radius: 18px; background: var(--warn-soft); border: 1.5px solid var(--warn); }
+    .sin-activo h2 { margin: 0 0 4px; font-size: 1.15rem; }
+    .sin-activo p { margin: 0; color: var(--ink-2); }
+    @media (max-width: 720px) { .sin-activo { flex-direction: column; align-items: stretch; } }
+    .anios { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .anios-et { font-size: .85rem; font-weight: 700; color: var(--ink-2); }
+    .anio-chip { display: flex; align-items: baseline; gap: 6px; padding: 7px 14px; font: inherit; color: inherit; background: var(--card); border: 1.5px solid var(--line-2); border-radius: 999px; cursor: pointer; }
+    .anio-chip small { font-size: .72rem; font-weight: 700; text-transform: uppercase; color: var(--ink-2); }
+    .anio-chip.on { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+    .anio-chip:disabled { opacity: .6; cursor: wait; }
+    .asistente { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; border-radius: 18px; background: var(--primary-soft); border: 1.5px solid var(--primary); }
+    .asistente h2 { margin: 0 0 4px; font-size: 1.15rem; }
+    .asistente p { margin: 0; color: var(--ink-2); max-width: 70ch; }
+    .btn-grande { padding: 12px 22px; font-size: 1rem; white-space: nowrap; }
+    @media (max-width: 720px) { .asistente { flex-direction: column; align-items: stretch; } }
     .avance { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 104px; height: 104px; border-radius: 50%; background: rgb(255 255 255 / .16); border: 2px solid rgb(255 255 255 / .55); text-align: center; }
     .avance strong { font-size: 1.9rem; font-weight: 900; line-height: 1; }
     .avance small { font-size: .85rem; }
@@ -164,13 +224,20 @@ export class AperturaComponent implements OnInit {
   protected readonly esAdmin = inject(AuthService).isAdmin;
 
   protected readonly cargando = signal(true);
+  protected readonly asistente = signal(false);
   protected readonly activando = signal(false);
   protected readonly soloPendientes = signal(false);
   /** Paso abierto (con su explicación); al cargar se abre el primero que falta. */
   protected readonly abierto = signal<string | null>(null);
   private readonly datos = signal<DatosApertura | null>(null);
 
-  protected readonly anio = computed(() => anioPorAbrir(this.datos()?.anios ?? null));
+  /** Todos los años que no están cerrados (el cerrado ya terminó): de ahí se elige cuál revisar. */
+  private readonly todosAnios = signal<Anio[]>([]);
+  protected readonly aniosVisibles = computed(() => this.todosAnios().filter(a => a.estado !== 'CERRADO').sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio)));
+  protected readonly hayActivo = computed(() => this.todosAnios().some(a => a.estado === 'ACTIVO'));
+  /** El año elegido para revisar; mientras no se elija otro, el activo (y sin activo, el próximo por abrir). */
+  private readonly elegidoId = signal<number | null>(null);
+  protected readonly anio = computed(() => this.datos() ? resolverAnio(this.todosAnios(), this.elegidoId()) : null);
   protected readonly pasos = computed<PasoApertura[]>(() => (this.datos() ? evaluarApertura(this.datos()!) : []));
   protected readonly siguiente = computed(() => siguientePaso(this.pasos()));
   protected readonly avance = computed(() => avanceApertura(this.pasos()));
@@ -179,7 +246,25 @@ export class AperturaComponent implements OnInit {
   protected readonly hayCampania = computed(() => this.pasos().find(p => p.id === 'campania')?.estado === 'ok');
   protected readonly faltan = computed(() => this.pasos().filter(p => p.requerido && p.id !== 'campania' && p.estado !== 'ok').map(p => p.titulo.toLowerCase()));
 
+  private readonly ruta = inject(ActivatedRoute, { optional: true });
+  /** El asistente guardó algo: la lista de pasos se vuelve a revisar al cerrarlo (no en cada clic, para no gastar peticiones). */
+  protected cambioEnAsistente = false;
+
+  protected cerrarAsistente(): void {
+    this.asistente.set(false);
+    if (this.cambioEnAsistente) { this.cambioEnAsistente = false; this.cargar(); }
+  }
+
   ngOnInit(): void {
+    this.cargar();
+    // ?asistente=1 (botones de otras pantallas) abre el asistente directamente.
+    if (this.esAdmin() && this.ruta?.snapshot.queryParamMap.get('asistente') === '1') this.asistente.set(true);
+  }
+
+  protected elegirAnio(id: number): void {
+    if (this.anio()?.id === id) return;
+    this.elegidoId.set(id);
+    this.abierto.set(null);
     this.cargar();
   }
 
@@ -198,8 +283,11 @@ export class AperturaComponent implements OnInit {
       grados: seguro(this.api.grados()),
       bloques: seguro(this.api.bloques()),
       conceptos: seguro(this.pagos.conceptos().pipe(map(c => c.filter(x => x.activo).length)))
-    }).subscribe(base => {
-      const anioId = anioPorAbrir(base.anios)?.id;
+    }).subscribe(base0 => {
+      if (base0.anios) this.todosAnios.set(base0.anios);
+      const anioId = base0.anios ? resolverAnio(base0.anios, this.elegidoId())?.id : undefined;
+      // La evaluación mira un solo año: el elegido (así sus pasos no se mezclan con los de otro año).
+      const base = { ...base0, anios: base0.anios && anioId ? base0.anios.filter(a => a.id === anioId) : base0.anios };
       const nulo = <T>(valor: T): Observable<T | null> => of(base.anios === null ? null : valor);
       forkJoin({
         periodos: anioId ? seguro(this.api.periodos(anioId)) : nulo([]),

@@ -45,8 +45,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/matriculas/*").hasAnyRole("ADMIN", "SECRETARIA", "DOCENTE", "APODERADO", "ALUMNO")
 
                 // Escritura
-                .requestMatchers(HttpMethod.PATCH, "/api/v1/matriculas/*/aprobar", "/api/v1/matriculas/*/rechazar").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/v1/matriculas/*/reenviar-acceso").hasRole("ADMIN")
+                // Confirmar una matrícula pagada (aprobar/rechazar) y reenviar el acceso: administración y secretaría
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/matriculas/*/aprobar", "/api/v1/matriculas/*/rechazar").hasAnyRole("ADMIN", "SECRETARIA")
+                .requestMatchers(HttpMethod.POST, "/api/v1/matriculas/*/reenviar-acceso").hasAnyRole("ADMIN", "SECRETARIA")
                 .requestMatchers("/api/v1/matriculas/**").hasAnyRole("ADMIN", "SECRETARIA")
                 .anyRequest().authenticated()
             )

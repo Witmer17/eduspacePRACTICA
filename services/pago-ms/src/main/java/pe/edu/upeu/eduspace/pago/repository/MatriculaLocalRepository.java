@@ -12,6 +12,8 @@ public interface MatriculaLocalRepository extends JpaRepository<MatriculaLocal, 
 
     List<MatriculaLocal> findByAlumnoId(Long alumnoId);
 
+    List<MatriculaLocal> findByEstadoOrderByMatriculaIdDesc(String estado);
+
     List<MatriculaLocal> findBySeccionIdAndEstado(Long seccionId, String estado);
 
     Optional<MatriculaLocal> findByAlumnoIdAndAnioIdAndEstadoIn(Long alumnoId, Long anioId, List<String> estados);

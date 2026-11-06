@@ -12,6 +12,16 @@ public interface AlumnosClient {
     @GetMapping("/internal/alumnos/{id}")
     AlumnoBasico alumno(@PathVariable("id") Long id);
 
+    /** El alumno con ese número de documento (404 si no hay): así se ubica al hermano que declara la familia. */
+    @GetMapping("/internal/alumnos/documento/{numero}")
+    AlumnoBasico alumnoPorDocumento(@PathVariable("numero") String numero);
+
+    /** Los apoderados registrados de un alumno, con su documento y nombres (para comprobar los datos del apoderado de un hermano). */
+    @GetMapping("/internal/alumnos/{id}/apoderados")
+    List<ApoderadoDeAlumno> apoderadosDe(@PathVariable("id") Long id);
+
+    record ApoderadoDeAlumno(Long id, String tipoDocumento, String numeroDocumento, String nombres, String apellidos) {}
+
     @GetMapping("/internal/alumnos/{id}/expediente-completo")
     Expediente expediente(@PathVariable("id") Long id);
 
@@ -48,6 +58,7 @@ public interface AlumnosClient {
 
     record RegistroAlumno(String tipoDocumento, String numeroDocumento, String nombres, String apellidoPaterno, String apellidoMaterno,
                           String fechaNacimiento, String sexo, String nacionalidad, String telefono, String email,
+                          String direccion, String distrito, String colegioProcedencia,
                           List<VinculoApoderado> apoderados) {}
 
     record VinculoApoderado(ApoderadoDatos apoderado, String parentesco, Boolean esPrincipal, Boolean esResponsablePago,

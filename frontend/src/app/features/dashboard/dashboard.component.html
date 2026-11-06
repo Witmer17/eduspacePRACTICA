@@ -4,6 +4,95 @@
     [subtitulo]="!mostrarPanel ? 'Resumen institucional del personal por áreas' : datos().anio ? 'Año académico ' + datos().anio!.nombre + ' · resumen de hoy' : 'No hay un año académico activo'"
   />
 
+  <!-- Periodo académico: en cuál estamos, días que le quedan y el botón para crear uno nuevo -->
+  @let sp = situacion();
+  <section class="card card-periodo" [class.alerta]="sp.porTerminar || sp.estado === 'entre-periodos'" [class.vacio]="sp.estado === 'sin-anio' || sp.estado === 'sin-periodos'" aria-labelledby="t-periodo">
+    <div class="card-body">
+      <div class="periodo-cab">
+        <div>
+          <h2 id="t-periodo" class="sec-titulo" style="margin: 0">Periodo académico</h2>
+          <p class="muted" style="margin: 2px 0 0">{{ anioDelInicio() ? 'Año académico ' + anioDelInicio()!.nombre + ' · ' + (sp.diasAnio !== null ? 'al año le quedan ' + textoDias(sp.diasAnio) : 'el año ya terminó') : 'No hay un año académico activo' }}</p>
+        </div>
+        <div class="periodo-acciones">
+          @if (esAdmin() && anioDelInicio()) {
+            <a class="btn btn-sm btn-primary" routerLink="/planificacion/anios" [queryParams]="{ nuevoPeriodo: 1 }">+ Nuevo periodo</a>
+          }
+          @if (esAdmin()) { <a class="btn btn-sm" routerLink="/apertura" [queryParams]="{ asistente: 1 }" title="Año, periodos, secciones, docentes, tarifas y campaña en una sola ventana">Asistente de apertura</a> }
+          @if (esAdmin()) { <a class="btn btn-sm" routerLink="/planificacion/anios" [queryParams]="{ nuevoAnio: 1 }">+ Nuevo año</a> }
+          <a class="btn btn-sm" routerLink="/planificacion/anios">Ver años y periodos</a>
+        </div>
+      </div>
+
+      @if (cargandoPeriodo()) {
+        <p class="muted" style="margin: 14px 0 0">Cargando el periodo…</p>
+      } @else {
+        @switch (sp.estado) {
+          @case ('en-curso') {
+            <div class="periodo-cuerpo">
+              <div>
+                <h3 class="periodo-nombre">{{ sp.actual!.nombre }}</h3>
+                <p class="periodo-fechas">Del {{ fechaCorta(sp.actual!.fechaInicio) }} al {{ fechaCorta(sp.actual!.fechaFin) }}</p>
+                <div class="periodo-barra" [class.alerta]="sp.porTerminar" role="img" [attr.aria-label]="sp.avance + '% del periodo transcurrido'"><span [style.width.%]="sp.avance"></span></div>
+                <p class="muted" style="margin: 6px 0 0; font-size: .82rem">{{ sp.avance }}% del periodo transcurrido</p>
+              </div>
+              <div class="periodo-dias" [class.alerta]="sp.porTerminar" aria-live="polite">
+                <strong>{{ sp.diasRestantes }}</strong>
+                <span>{{ sp.diasRestantes === 1 ? 'día por finalizar' : sp.diasRestantes === 0 ? 'termina hoy' : 'días por finalizar' }}</span>
+              </div>
+            </div>
+            @if (sp.faltaSiguiente) {
+              <div class="aviso aviso-warn" role="status" style="margin-top: 14px">
+                Este periodo termina {{ sp.diasRestantes === 0 ? 'hoy' : 'en ' + textoDias(sp.diasRestantes!) }} y todavía no hay un periodo siguiente.
+                @if (esAdmin()) { <a routerLink="/planificacion/anios" [queryParams]="{ nuevoPeriodo: 1 }"><strong>Crear el nuevo periodo</strong></a> }
+              </div>
+            } @else if (sp.siguiente) {
+              <div class="periodo-pie"><span>Sigue: <strong>{{ sp.siguiente.nombre }}</strong> ({{ fechaCorta(sp.siguiente.fechaInicio) }} al {{ fechaCorta(sp.siguiente.fechaFin) }})</span></div>
+            }
+          }
+          @case ('entre-periodos') {
+            <div class="aviso aviso-warn" role="status" style="margin-top: 14px">
+              Hoy no hay un periodo en curso. <strong>{{ sp.siguiente!.nombre }}</strong> empieza el {{ fechaCorta(sp.siguiente!.fechaInicio) }} (en {{ textoDias(sp.diasParaSiguiente!) }}).
+            </div>
+          }
+          @case ('por-empezar') {
+            <div class="aviso aviso-warn" role="status" style="margin-top: 14px">
+              El año aún no empieza: <strong>{{ sp.siguiente!.nombre }}</strong> arranca el {{ fechaCorta(sp.siguiente!.fechaInicio) }} (en {{ textoDias(sp.diasParaSiguiente!) }}).
+            </div>
+          }
+          @case ('terminado') {
+            <div class="aviso" [class.aviso-warn]="sp.faltaSiguiente" role="status" style="margin-top: 14px">
+              {{ sp.faltaSiguiente ? 'Ya pasaron todos los periodos y el año sigue abierto: falta crear el siguiente.' : 'Todos los periodos de este año ya terminaron.' }}
+              @if (esAdmin() && sp.faltaSiguiente) { <a routerLink="/planificacion/anios" [queryParams]="{ nuevoPeriodo: 1 }"><strong>Crear el nuevo periodo</strong></a> }
+            </div>
+          }
+          @case ('sin-periodos') {
+            <div class="aviso aviso-warn" role="status" style="margin-top: 14px">
+              El año {{ anioDelInicio()!.nombre }} todavía no tiene periodos (bimestres o trimestres).
+              @if (esAdmin()) { <a routerLink="/planificacion/anios" [queryParams]="{ nuevoPeriodo: 1 }"><strong>Crear el primer periodo</strong></a> }
+            </div>
+          }
+          @default {
+            <div class="aviso aviso-warn" role="status" style="margin-top: 14px">
+              No hay un año académico activo, así que no hay periodo en curso. @if (esAdmin()) { <a routerLink="/planificacion/anios" [queryParams]="{ nuevoAnio: 1 }"><strong>Crear un año</strong></a> · } <a routerLink="/planificacion/anios"><strong>Abrir o activar un año</strong></a>
+            </div>
+          }
+        }
+      }
+    </div>
+  </section>
+
+  <!-- Pagos al personal que caja ya registró: el administrador los aprueba o rechaza aquí mismo (solo aparece si hay alguno) -->
+  @if (esAdmin()) { <app-pagos-por-aprobar /> }
+
+  <!-- Descuentos de matrícula que las familias piden y esperan respuesta -->
+  @if (esAdmin()) { <app-solicitudes-descuento /> }
+
+  <!-- Matrícula en línea: si hay campaña abierta, y el botón para abrirla (con su formulario) si no la hay -->
+  @if (esAdmin()) { <app-matricula-inicio /> }
+
+  <!-- Alumnos con la matrícula pagada que esperan su aprobación (las aprueban el administrador y la secretaría) -->
+  @if (puedeAprobar()) { <app-por-aprobar-inicio /> }
+
   <!-- Card de Personal por áreas -->
   <section class="card card-personal" aria-labelledby="t-personal">
     <div class="card-body">
