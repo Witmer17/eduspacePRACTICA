@@ -77,11 +77,13 @@ public class SeccionServiceImpl implements SeccionService {
                 ? repository.existsByAnioIdAndGradoIdAndNombre(r.anioId(), r.gradoId(), r.nombre())
                 : repository.existsByAnioIdAndGradoIdAndNombreAndIdNot(r.anioId(), r.gradoId(), r.nombre(), id);
         if (repetida) {
-            throw new BusinessRuleException("Ya existe la sección " + r.nombre() + " de " + grado.getNombre() + " en el año " + anio.getNombre());
+            throw new BusinessRuleException("Ya existe la sección " + r.nombre() + " de " + grado.getNombre()
+                    + " en el año " + anio.getNombre());
         }
         Aula aula = null;
         if (r.aulaId() != null) {
-            aula = aulaRepository.findById(r.aulaId()).orElseThrow(() -> ResourceNotFoundException.of("Aula", r.aulaId()));
+            aula = aulaRepository.findById(r.aulaId())
+                    .orElseThrow(() -> ResourceNotFoundException.of("Aula", r.aulaId()));
             if (!Boolean.TRUE.equals(aula.getActivo())) {
                 throw new BusinessRuleException("El aula " + aula.getCodigo() + " está inactiva");
             }
@@ -104,7 +106,8 @@ public class SeccionServiceImpl implements SeccionService {
         }
         Turno turno = r.turno() == null ? Turno.MANANA : r.turno();
         if (id != null && seccion.getTurno() != turno && horarioHaySobre(id)) {
-            throw new BusinessRuleException("No se puede cambiar el turno de una sección que ya tiene clases en el horario");
+            throw new BusinessRuleException(
+                    "No se puede cambiar el turno de una sección que ya tiene clases en el horario");
         }
         seccion.setAnio(anio);
         seccion.setGrado(grado);

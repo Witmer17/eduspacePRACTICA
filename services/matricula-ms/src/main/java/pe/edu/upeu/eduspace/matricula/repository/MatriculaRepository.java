@@ -39,6 +39,7 @@ public interface MatriculaRepository extends JpaRepository<Matricula, Long> {
           AND (:seccionId IS NULL OR m.seccionId = :seccionId)
           AND (:estado IS NULL OR m.estado = :estado)
           AND (:texto = '' OR LOWER(m.alumnoNombre) LIKE LOWER(CONCAT('%', :texto, '%')) OR LOWER(m.codigo) LIKE LOWER(CONCAT('%', :texto, '%')))
+            order by m.id desc
         """)
     Page<Matricula> buscar(@Param("anioId") Long anioId, @Param("gradoId") Long gradoId, @Param("seccionId") Long seccionId,
                            @Param("estado") String estado, @Param("texto") String texto, Pageable pageable);

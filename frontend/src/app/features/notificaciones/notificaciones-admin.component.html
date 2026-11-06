@@ -100,7 +100,7 @@
             @for (n of lista(); track n.id) {
               <tr>
                 <td class="muted">{{ n.creadaEn | date: 'dd/MM/yyyy HH:mm' }}</td>
-                <td>{{ n.usuarioId || 'sin resolver' }}</td>
+                <td>{{ n.usuarioId ? 'Usuario ' + n.usuarioId : 'sin resolver' }}</td>
                 <td>{{ tipoTexto(n.tipo) }}</td>
                 <td>{{ canalTexto(n.canal) }}</td>
                 <td style="max-width: 340px"><strong>{{ n.titulo }}</strong><br /><span class="muted">{{ n.mensaje }}</span></td>

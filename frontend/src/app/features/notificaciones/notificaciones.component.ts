@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CANALES, CanalNotificacion, Notificacion, Preferencia, TIPOS_NOTIFICACION } from '../../core/models/notificacion.model';
 import { NotificacionService } from '../../core/services/notificacion.service';
 import { NotificationService } from '../../core/services/notification.service';
@@ -67,10 +67,26 @@ export class NotificacionesComponent implements OnInit {
     this.api.actualizarConteo().subscribe({ error: () => undefined });
   }
 
+  /** Subtítulo del encabezado: cuántos avisos faltan por leer. */
+  protected readonly subtitulo = computed(() => {
+    const n = this.noLeidas();
+    return n === 0 ? 'No tienes avisos sin leer.' : `Tienes ${n} aviso${n === 1 ? '' : 's'} sin leer.`;
+  });
+
+  /** Un clic marca el aviso como leído. En «Sin leer» desaparece de la lista al instante. */
   protected marcar(n: Notificacion): void {
     if (n.leida) return;
     this.api.marcarLeida(n.id).subscribe({
-      next: () => this.lista.update(l => l.map(x => (x.id === n.id ? { ...x, leida: true } : x))),
+      next: () => {
+        if (this.pestana() === 'sinLeer') {
+          this.lista.update(l => l.filter(x => x.id !== n.id));
+          this.total.update(t => Math.max(0, t - 1));
+          // si la página quedó vacía, pedir la anterior (o recargar esta) para no dejar huecos
+          if (this.lista().length === 0) this.cargar(Math.max(0, this.pagina() - 1));
+        } else {
+          this.lista.update(l => l.map(x => (x.id === n.id ? { ...x, leida: true } : x)));
+        }
+      },
       error: e => this.avisos.error(mensajeError(e))
     });
   }

@@ -65,7 +65,10 @@ export class AlumnoDetalleComponent {
   private readonly generador = inject(DocumentosDatosService);
   /** Las cuentas se administran solo con el login propio y solo el ADMIN. */
   private readonly sesion = inject(AuthService);
-  protected readonly puedeCuentas = computed(() => this.sesion.isAdmin() && !this.sesion.esKeycloak);
+  /** Restaurar la clave es solo del administrador. Con Keycloak también (las cuentas se sincronizan con él, según PENDIENTES-KEYCLOAK.md). */
+  protected readonly puedeCuentas = computed(() => this.sesion.isAdmin());
+  /** Crear la cuenta de un alumno la puede hacer también la secretaría (el servidor limita a alumnos, apoderados y docentes). */
+  protected readonly puedeCrearCuenta = computed(() => this.sesion.isAdmin() || this.sesion.roles().includes('SECRETARIA'));
   protected readonly cuenta = signal<Usuario | null>(null);
   protected readonly trabajandoCuenta = signal(false);
 
@@ -265,6 +268,23 @@ export class AlumnoDetalleComponent {
       error: e => {
         this.trabajandoCuenta.set(false);
         this.avisos.error(mensajeError(e, 'No se pudo crear la cuenta.'));
+      }
+    });
+  }
+
+  /** Crea la cuenta de un apoderado (usuario nombre.apellido, clave inicial su documento) y la vincula a su ficha. */
+  protected crearCuentaApoderado(a: Alumno, v: Vinculo): void {
+    const ap = v.apoderado;
+    this.trabajandoCuenta.set(true);
+    this.cuentas.crear({ tipo: 'APODERADO', id: ap.id, nombres: ap.nombres, apellidos: ap.apellidos, documento: ap.numeroDocumento }).subscribe({
+      next: u => {
+        this.trabajandoCuenta.set(false);
+        this.avisos.success(`Cuenta del apoderado creada: usuario ${u.username}, clave inicial su documento.`);
+        this.recargarAlumno();
+      },
+      error: e => {
+        this.trabajandoCuenta.set(false);
+        this.avisos.error(mensajeError(e, 'No se pudo crear la cuenta del apoderado.'));
       }
     });
   }

@@ -21,6 +21,7 @@ public interface AlumnoRepository extends JpaRepository<Alumno, Long> {
                or lower(coalesce(a.apellidoMaterno, '')) like lower(concat('%', :q, '%'))
                or a.numeroDocumento like concat('%', :q, '%')
                or lower(a.codigo) like lower(concat('%', :q, '%'))
+            order by a.id desc
             """)
     Page<Alumno> buscar(@Param("q") String q, Pageable pageable);
 
@@ -32,6 +33,7 @@ public interface AlumnoRepository extends JpaRepository<Alumno, Long> {
                or lower(coalesce(a.apellidoMaterno, '')) like lower(concat('%', :q, '%'))
                or a.numeroDocumento like concat('%', :q, '%')
                or lower(a.codigo) like lower(concat('%', :q, '%')))
+            order by a.id desc
             """)
     Page<Alumno> buscarPorEstado(@Param("q") String q, @Param("estado") EstadoAlumno estado, Pageable pageable);
 

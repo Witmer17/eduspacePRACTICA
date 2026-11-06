@@ -38,6 +38,8 @@ public class SecurityConfig {
                 .requestMatchers("/.well-known/jwks.json").permitAll()
                 .requestMatchers("/internal/**").permitAll()   // protegido por ServiceTokenFilter (X-Service-Token)
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
+                // Secretaría puede crear las cuentas de alumnos, apoderados y docentes (el controlador le impide crear otros roles)
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/usuarios/cuentas").hasAnyRole("ADMIN", "SECRETARIA")
                 .requestMatchers("/api/v1/auth/usuarios/**").hasRole("ADMIN")
                 .anyRequest().authenticated())
             .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(convertidor())));

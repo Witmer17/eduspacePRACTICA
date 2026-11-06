@@ -27,10 +27,10 @@
             <dt>Cuenta de acceso</dt>
             <dd>
               @if (!a.usuarioId) { Sin cuenta } @else if (cuenta(); as c) { <code>{{ c.username }}</code> · {{ c.debeCambiarClave ? 'aún no cambia su clave' : 'activa' }} } @else { Vinculada }
-              @if (puedeCuentas()) {
-                @if (!a.usuarioId) {
+              @if (puedeCrearCuenta() || puedeCuentas()) {
+                @if (!a.usuarioId && puedeCrearCuenta()) {
                   <button type="button" class="btn btn-sm btn-primary" style="margin-left: 8px" [disabled]="trabajandoCuenta()" (click)="crearCuenta(a)">Crear cuenta</button>
-                } @else {
+                } @else if (a.usuarioId && puedeCuentas()) {
                   <button type="button" class="btn btn-sm" style="margin-left: 8px" [disabled]="trabajandoCuenta()" (click)="restaurarCuenta(a)">Restaurar clave</button>
                 }
               }
@@ -101,7 +101,7 @@
       </div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Apoderado</th><th>Parentesco</th><th>Contacto</th><th>Roles</th><th></th></tr></thead>
+          <thead><tr><th>Apoderado</th><th>Parentesco</th><th>Contacto</th><th>Roles</th><th>Cuenta de acceso</th><th></th></tr></thead>
           <tbody>
             @for (v of a.apoderados; track v.id) {
               <tr>
@@ -114,13 +114,23 @@
                   @if (v.viveConAlumno) { <span class="badge badge-gray" style="margin-right: 4px">Vive con él</span> }
                   @if (v.puedeRecoger) { <span class="badge badge-gray">Puede recoger</span> }
                 </td>
+                <td>
+                  @if (v.apoderado.usuarioId) {
+                    <span class="badge badge-ok">Con cuenta</span>
+                  } @else if (puedeCrearCuenta()) {
+                    <span class="badge badge-warn">Sin cuenta</span>
+                    <button type="button" class="btn btn-sm btn-primary" style="margin-left: 6px" [disabled]="trabajandoCuenta()" (click)="crearCuentaApoderado(a, v)">Crear cuenta</button>
+                  } @else {
+                    <span class="badge badge-gray">Sin cuenta</span>
+                  }
+                </td>
                 <td class="acciones">
                   <button type="button" class="btn btn-sm" (click)="editarVinculo(v)">Editar</button>
                   <button type="button" class="btn btn-sm" (click)="quitarVinculo(v)">Quitar</button>
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="5" class="vacio">Sin apoderados registrados.</td></tr>
+              <tr><td colspan="6" class="vacio">Sin apoderados registrados.</td></tr>
             }
           </tbody>
         </table>

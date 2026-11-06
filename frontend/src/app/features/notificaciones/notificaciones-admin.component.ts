@@ -179,6 +179,10 @@ export class NotificacionesAdminComponent implements OnInit {
       return;
     }
     const v = this.formEnvio.getRawValue();
+    if (!v.titulo.trim() || !v.mensaje.trim()) {
+      this.resultado.set({ ok: false, texto: 'El título y el mensaje no pueden estar vacíos ni tener solo espacios.' });
+      return;
+    }
     const canales: CanalNotificacion[] = [];
     if (v.inApp) canales.push('IN_APP');
     if (v.push) canales.push('PUSH');
@@ -186,9 +190,22 @@ export class NotificacionesAdminComponent implements OnInit {
       this.resultado.set({ ok: false, texto: 'Elige al menos un canal.' });
       return;
     }
+    // Enviar no se puede deshacer: se confirma con el número de personas y el texto exacto
+    this.confirmarEnvio(d.usuarioIds.length, v.titulo.trim(), v.mensaje.trim(), canales);
+  }
+
+  private async confirmarEnvio(cantidad: number, titulo: string, mensaje: string, canales: CanalNotificacion[]): Promise<void> {
+    const canalesTxt = canales.map(c => (c === 'IN_APP' ? 'la app' : 'push')).join(' y ');
+    const ok = await this.confirmacion.confirmar(
+      `Se enviará «${titulo}» a ${cantidad} persona(s) por ${canalesTxt}. Mensaje: «${mensaje}». No se puede deshacer.`,
+      'Enviar aviso'
+    );
+    if (!ok) return;
+    const d = this.destino();
+    if (!d) return;
     this.enviando.set(true);
     this.resultado.set(null);
-    this.api.enviar({ usuarioIds: d.usuarioIds, titulo: v.titulo.trim(), mensaje: v.mensaje.trim(), canales }).subscribe({
+    this.api.enviar({ usuarioIds: d.usuarioIds, titulo, mensaje, canales }).subscribe({
       next: r => {
         this.enviando.set(false);
         this.resultado.set({ ok: true, texto: `Enviado a ${d.usuarioIds.length} usuario(s): ${r.creadas} aviso(s) creados, ${r.omitidas} omitidos (preferencias o sin dispositivo).` });

@@ -15,6 +15,7 @@ public interface DocenteRepository extends JpaRepository<Docente, Long> {
             where lower(d.apellidos) like lower(concat('%', :q, '%'))
                or lower(d.nombres) like lower(concat('%', :q, '%'))
                or d.numeroDocumento like concat('%', :q, '%')
+            order by d.id desc
             """)
     Page<Docente> buscar(@Param("q") String q, Pageable pageable);
 
@@ -25,6 +26,7 @@ public interface DocenteRepository extends JpaRepository<Docente, Long> {
               and (lower(d.apellidos) like lower(concat('%', :q, '%'))
                 or lower(d.nombres) like lower(concat('%', :q, '%'))
                 or d.numeroDocumento like concat('%', :q, '%'))
+            order by d.id desc
             """)
     Page<Docente> buscarPorArea(@Param("q") String q, @Param("areaId") Long areaId, Pageable pageable);
 
@@ -35,6 +37,7 @@ public interface DocenteRepository extends JpaRepository<Docente, Long> {
               and (lower(d.apellidos) like lower(concat('%', :q, '%'))
                 or lower(d.nombres) like lower(concat('%', :q, '%'))
                 or d.numeroDocumento like concat('%', :q, '%'))
+            order by d.id desc
             """)
     Page<Docente> buscarPorEstado(@Param("q") String q, @Param("estado") pe.edu.eduspace.planificacion.entity.EstadoDocente estado, Pageable pageable);
 
@@ -46,6 +49,7 @@ public interface DocenteRepository extends JpaRepository<Docente, Long> {
               and (lower(d.apellidos) like lower(concat('%', :q, '%'))
                 or lower(d.nombres) like lower(concat('%', :q, '%'))
                 or d.numeroDocumento like concat('%', :q, '%'))
+            order by d.id desc
             """)
     Page<Docente> buscarPorAreaYEstado(@Param("q") String q, @Param("areaId") Long areaId,
                                        @Param("estado") pe.edu.eduspace.planificacion.entity.EstadoDocente estado, Pageable pageable);

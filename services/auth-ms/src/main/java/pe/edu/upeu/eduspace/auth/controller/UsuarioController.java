@@ -7,7 +7,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
+import java.util.Set;
 import pe.edu.upeu.eduspace.auth.dto.Dtos.*;
 import pe.edu.upeu.eduspace.auth.service.UsuarioService;
 
@@ -41,7 +44,15 @@ public class UsuarioController {
 
     @PostMapping("/cuentas")
     @Operation(summary = "Crea la cuenta de una persona: usuario nombre.apellido y clave inicial = documento (cambio obligatorio al entrar)")
-    public ResponseEntity<UsuarioConClaveTemporal> crearCuenta(@Valid @RequestBody CuentaPersonaRequest req) {
+    public ResponseEntity<UsuarioConClaveTemporal> crearCuenta(@Valid @RequestBody CuentaPersonaRequest req, Authentication auth) {
+        boolean admin = auth.getAuthorities().stream().anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!admin) {
+            // La secretaría solo crea las cuentas de quienes atiende: alumnos, apoderados y docentes (no personal con permisos ni administradores)
+            String rol = req.rol().trim().toUpperCase().replace("ROLE_", "");
+            if (!Set.of("ALUMNO", "APODERADO", "DOCENTE").contains(rol)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "La secretaría solo puede crear cuentas de alumnos, apoderados y docentes.");
+            }
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(service.crearCuentaPersona(req));
     }
 

@@ -16,6 +16,7 @@ public interface ApoderadoRepository extends JpaRepository<Apoderado, Long> {
             where lower(a.nombres) like lower(concat('%', :q, '%'))
                or lower(a.apellidos) like lower(concat('%', :q, '%'))
                or a.numeroDocumento like concat('%', :q, '%')
+            order by a.id desc
             """)
     Page<Apoderado> buscar(@Param("q") String q, Pageable pageable);
 

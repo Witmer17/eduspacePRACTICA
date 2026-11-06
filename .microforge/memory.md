@@ -1,0 +1,1 @@
+- 2026-11-06: Cuentas de prueba (dev) para la clase 1° A Matemática (sección 172, docente 120): alumno lucia.calo (usuario 68, ficha 15) y apoderado rosa.mamani (usuario 69, ficha apoderado 15). Clave inicial = número de documento; el sistema pide cambiarla al entrar. Docente: prueba.docente (usuario 65, vinculado a docente 120), clave no registrada.
