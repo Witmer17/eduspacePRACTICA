@@ -4522,3 +4522,109 @@ public class ExamenesApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### 1. ExamenMapper.java
+**Ruta:** `services/examenes-ms/src/main/java/pe/edu/upeu/eduspace/examenes/mapper/ExamenMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.examenes.mapper;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.examenes.dto.ExamenResponse;
+import pe.edu.upeu.eduspace.examenes.dto.PreguntaResponse;
+import pe.edu.upeu.eduspace.examenes.entity.Examen;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Component
+@RequiredArgsConstructor
+public class ExamenMapper {
+
+    private final PreguntaMapper preguntaMapper;
+
+    public ExamenResponse toResponse(Examen e) {
+        if (e == null) return null;
+        List<PreguntaResponse> preguntas = (e.getPreguntas() != null)
+            ? e.getPreguntas().stream().map(preguntaMapper::toResponse).collect(Collectors.toList())
+            : Collections.emptyList();
+
+        return ExamenResponse.builder()
+            .id(e.getId())
+            .cursoId(e.getCursoId())
+            .seccionId(e.getSeccionId())
+            .docenteId(e.getDocenteId())
+            .titulo(e.getTitulo())
+            .descripcion(e.getDescripcion())
+            .fechaInicio(e.getFechaInicio())
+            .fechaFin(e.getFechaFin())
+            .duracionMinutos(e.getDuracionMinutos())
+            .puntajeMaximo(e.getPuntajeMaximo())
+            .estado(e.getEstado())
+            .preguntas(preguntas)
+            .build();
+    }
+}
+```
+
+### 2. PreguntaMapper.java
+**Ruta:** `services/examenes-ms/src/main/java/pe/edu/upeu/eduspace/examenes/mapper/PreguntaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.examenes.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.examenes.dto.PreguntaResponse;
+import pe.edu.upeu.eduspace.examenes.entity.Pregunta;
+
+@Component
+public class PreguntaMapper {
+
+    public PreguntaResponse toResponse(Pregunta p) {
+        if (p == null) return null;
+        return PreguntaResponse.builder()
+            .id(p.getId())
+            .enunciado(p.getEnunciado())
+            .tipo(p.getTipo())
+            .puntaje(p.getPuntaje())
+            .orden(p.getOrden())
+            .opciones(p.getOpciones())
+            .build();
+    }
+}
+```
+
+### 3. IntentoMapper.java
+**Ruta:** `services/examenes-ms/src/main/java/pe/edu/upeu/eduspace/examenes/mapper/IntentoMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.examenes.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.examenes.dto.IntentoResponse;
+import pe.edu.upeu.eduspace.examenes.entity.Intento;
+
+@Component
+public class IntentoMapper {
+
+    public IntentoResponse toResponse(Intento i) {
+        if (i == null) return null;
+        return IntentoResponse.builder()
+            .id(i.getId())
+            .examenId(i.getExamen().getId())
+            .alumnoId(i.getAlumnoId())
+            .fechaInicio(i.getFechaInicio())
+            .fechaFin(i.getFechaFin())
+            .puntajeObtenido(i.getPuntajeObtenido())
+            .estado(i.getEstado())
+            .build();
+    }
+}
+```

@@ -5398,3 +5398,93 @@ public class MatriculaApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### 1. MatriculaMapper.java
+**Ruta:** `services/matricula-ms/src/main/java/pe/edu/upeu/eduspace/matricula/mapper/MatriculaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.matricula.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.matricula.dto.MatriculaResponse;
+import pe.edu.upeu.eduspace.matricula.entity.Matricula;
+
+@Component
+public class MatriculaMapper {
+
+    public MatriculaResponse toResponse(Matricula m) {
+        if (m == null) return null;
+        return MatriculaResponse.builder()
+            .id(m.getId())
+            .alumnoId(m.getAlumnoId())
+            .anioAcademicoId(m.getAnioAcademicoId())
+            .gradoId(m.getGradoId())
+            .seccionId(m.getSeccionId())
+            .codigo(m.getCodigo())
+            .estado(m.getEstado())
+            .tipoMatricula(m.getTipoMatricula())
+            .fechaMatricula(m.getFechaMatricula())
+            .observaciones(m.getObservaciones())
+            .build();
+    }
+}
+```
+
+### 2. CampaniaMapper.java
+**Ruta:** `services/matricula-ms/src/main/java/pe/edu/upeu/eduspace/matricula/mapper/CampaniaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.matricula.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.matricula.dto.CampaniaResponse;
+import pe.edu.upeu.eduspace.matricula.entity.Campania;
+
+@Component
+public class CampaniaMapper {
+
+    public CampaniaResponse toResponse(Campania c) {
+        if (c == null) return null;
+        return CampaniaResponse.builder()
+            .id(c.getId())
+            .nombre(c.getNombre())
+            .anioAcademicoId(c.getAnioAcademicoId())
+            .fechaInicio(c.getFechaInicio())
+            .fechaFin(c.getFechaFin())
+            .estado(c.getEstado())
+            .build();
+    }
+}
+```
+
+### 3. CupoMapper.java
+**Ruta:** `services/matricula-ms/src/main/java/pe/edu/upeu/eduspace/matricula/mapper/CupoMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.matricula.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.matricula.dto.CupoResponse;
+import pe.edu.upeu.eduspace.matricula.entity.Cupo;
+
+@Component
+public class CupoMapper {
+
+    public CupoResponse toResponse(Cupo c) {
+        if (c == null) return null;
+        return CupoResponse.builder()
+            .id(c.getId())
+            .gradoId(c.getGradoId())
+            .seccionId(c.getSeccionId())
+            .totalVacantes(c.getTotalVacantes())
+            .vacantesOcupadas(c.getVacantesOcupadas())
+            .vacantesDisponibles(c.getTotalVacantes() - c.getVacantesOcupadas())
+            .build();
+    }
+}
+```

@@ -2260,3 +2260,39 @@ public class AuthApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### UsuarioMapper.java
+**Ruta:** `services/auth-ms/src/main/java/pe/edu/upeu/eduspace/auth/mapper/UsuarioMapper.java`
+
+**Descripción:** Transforma la entidad `Usuario` en su DTO de salida `UsuarioResponse`, ocultando contraseñas y datos sensibles.
+
+```java
+package pe.edu.upeu.eduspace.auth.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.auth.dto.UsuarioResponse;
+import pe.edu.upeu.eduspace.auth.entity.Usuario;
+
+@Component
+public class UsuarioMapper {
+
+    public UsuarioResponse toResponse(Usuario u) {
+        if (u == null) return null;
+        return UsuarioResponse.builder()
+            .id(u.getId())
+            .username(u.getUsername())
+            .email(u.getEmail())
+            .nombres(u.getNombres())
+            .apellidos(u.getApellidos())
+            .rol(u.getRol())
+            .activo(u.getActivo())
+            .primerInicio(u.getPrimerInicio())
+            .build();
+    }
+}
+```

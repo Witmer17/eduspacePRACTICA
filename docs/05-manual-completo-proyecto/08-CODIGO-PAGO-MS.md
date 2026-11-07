@@ -9347,3 +9347,230 @@ public class PagoApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### 1. PagoMapper.java
+**Ruta:** `services/pago-ms/src/main/java/pe/edu/upeu/eduspace/pago/mapper/PagoMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.pago.mapper;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.pago.dto.ComprobanteResponse;
+import pe.edu.upeu.eduspace.pago.dto.PagoResponse;
+import pe.edu.upeu.eduspace.pago.entity.Comprobante;
+import pe.edu.upeu.eduspace.pago.entity.Pago;
+import pe.edu.upeu.eduspace.pago.entity.PagoDetalle;
+
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+@RequiredArgsConstructor
+public class PagoMapper {
+
+    private final ComprobanteMapper comprobanteMapper;
+
+    public PagoResponse toResponse(Pago p, Comprobante c) {
+        if (p == null) return null;
+
+        List<PagoResponse.PagoDetalleResponse> detResponses = new ArrayList<>();
+        if (p.getDetalles() != null) {
+            for (PagoDetalle d : p.getDetalles()) {
+                detResponses.add(PagoResponse.PagoDetalleResponse.builder()
+                    .id(d.getId())
+                    .cuotaId(d.getCuota().getId())
+                    .cuotaDescripcion(d.getCuota().getDescripcion())
+                    .montoAplicado(d.getMontoAplicado())
+                    .nuevoSaldoCuota(d.getCuota().getSaldo())
+                    .nuevoEstadoCuota(d.getCuota().getEstado())
+                    .build());
+            }
+        }
+
+        ComprobanteResponse compResp = (c != null) ? comprobanteMapper.toResponse(c) : null;
+
+        return PagoResponse.builder()
+            .id(p.getId())
+            .alumnoId(p.getAlumnoId())
+            .pagadorNombre(p.getPagadorNombre())
+            .pagadorDocumento(p.getPagadorDocumento())
+            .montoTotal(p.getMontoTotal())
+            .medio(p.getMedio())
+            .referencia(p.getReferencia())
+            .estado(p.getEstado())
+            .cajaSesionId(p.getCajaSesion() != null ? p.getCajaSesion().getId() : null)
+            .registradoPor(p.getRegistradoPor())
+            .pagadoEn(p.getPagadoEn())
+            .aprobadoEn(p.getAprobadoEn())
+            .motivoRechazo(p.getMotivoRechazo())
+            .idempotencyKey(p.getIdempotencyKey())
+            .comprobante(compResp)
+            .detalles(detResponses)
+            .build();
+    }
+}
+```
+
+### 2. CuotaMapper.java
+**Ruta:** `services/pago-ms/src/main/java/pe/edu/upeu/eduspace/pago/mapper/CuotaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.pago.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.pago.dto.CuotaResponse;
+import pe.edu.upeu.eduspace.pago.entity.Cuota;
+
+@Component
+public class CuotaMapper {
+
+    public CuotaResponse toResponse(Cuota cuota) {
+        if (cuota == null) return null;
+        return CuotaResponse.builder()
+            .id(cuota.getId())
+            .conceptoId(cuota.getConcepto().getId())
+            .conceptoNombre(cuota.getConcepto().getNombre())
+            .conceptoTipo(cuota.getConcepto().getTipo())
+            .alumnoId(cuota.getAlumnoId())
+            .matriculaId(cuota.getMatricula() != null ? cuota.getMatricula().getMatriculaId() : null)
+            .mes(cuota.getMes())
+            .numeroCuota(cuota.getNumeroCuota())
+            .descripcion(cuota.getDescripcion())
+            .fechaVencimiento(cuota.getFechaVencimiento())
+            .montoOriginal(cuota.getMontoOriginal())
+            .mora(cuota.getMora())
+            .descuento(cuota.getDescuento())
+            .montoTotal(cuota.getMontoTotal())
+            .saldo(cuota.getSaldo())
+            .estado(cuota.getEstado())
+            .pagadoEn(cuota.getPagadoEn())
+            .build();
+    }
+}
+```
+
+### 3. CajaSesionMapper.java
+**Ruta:** `services/pago-ms/src/main/java/pe/edu/upeu/eduspace/pago/mapper/CajaSesionMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.pago.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.pago.dto.CajaSesionResponse;
+import pe.edu.upeu.eduspace.pago.entity.CajaSesion;
+
+@Component
+public class CajaSesionMapper {
+
+    public CajaSesionResponse toResponse(CajaSesion s) {
+        if (s == null) return null;
+        return CajaSesionResponse.builder()
+            .id(s.getId())
+            .cajeroUsuarioId(s.getCajeroUsuarioId())
+            .cajeroNombre(s.getCajeroNombre())
+            .fechaApertura(s.getFechaApertura())
+            .montoApertura(s.getMontoApertura())
+            .estado(s.getEstado())
+            .saldoFinalEfectivo(s.getSaldoFinalEfectivo())
+            .diferencia(s.getDiferencia())
+            .cerradoEn(s.getCerradoEn())
+            .observaciones(s.getObservaciones())
+            .build();
+    }
+}
+```
+
+### 4. ComprobanteMapper.java
+**Ruta:** `services/pago-ms/src/main/java/pe/edu/upeu/eduspace/pago/mapper/ComprobanteMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.pago.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.pago.dto.ComprobanteResponse;
+import pe.edu.upeu.eduspace.pago.entity.Comprobante;
+
+@Component
+public class ComprobanteMapper {
+
+    public ComprobanteResponse toResponse(Comprobante c) {
+        if (c == null) return null;
+        return ComprobanteResponse.builder()
+            .id(c.getId())
+            .tipo(c.getTipo())
+            .serie(c.getSerie())
+            .correlativo(c.getCorrelativo())
+            .numeroCompleto(c.getNumeroCompleto())
+            .fechaEmision(c.getFechaEmision())
+            .clienteTipoDoc(c.getClienteTipoDoc())
+            .clienteNumeroDoc(c.getClienteNumeroDoc())
+            .clienteNombre(c.getClienteNombre())
+            .montoTotal(c.getMontoTotal())
+            .estado(c.getEstado())
+            .hashSunat(c.getHashSunat())
+            .build();
+    }
+}
+```
+
+### 5. TarifaMapper.java
+**Ruta:** `services/pago-ms/src/main/java/pe/edu/upeu/eduspace/pago/mapper/TarifaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.pago.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.pago.dto.TarifaResponse;
+import pe.edu.upeu.eduspace.pago.entity.Tarifa;
+
+@Component
+public class TarifaMapper {
+
+    public TarifaResponse toResponse(Tarifa t) {
+        if (t == null) return null;
+        return TarifaResponse.builder()
+            .id(t.getId())
+            .conceptoId(t.getConcepto().getId())
+            .conceptoNombre(t.getConcepto().getNombre())
+            .anioAcademicoId(t.getAnioAcademicoId())
+            .gradoId(t.getGradoId())
+            .nivel(t.getNivel())
+            .monto(t.getMonto())
+            .build();
+    }
+}
+```
+
+### 6. ConceptoPagoMapper.java
+**Ruta:** `services/pago-ms/src/main/java/pe/edu/upeu/eduspace/pago/mapper/ConceptoPagoMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.pago.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.pago.dto.ConceptoPagoResponse;
+import pe.edu.upeu.eduspace.pago.entity.ConceptoPago;
+
+@Component
+public class ConceptoPagoMapper {
+
+    public ConceptoPagoResponse toResponse(ConceptoPago c) {
+        if (c == null) return null;
+        return ConceptoPagoResponse.builder()
+            .id(c.getId())
+            .codigo(c.getCodigo())
+            .nombre(c.getNombre())
+            .tipo(c.getTipo())
+            .recurrente(c.getRecurrente())
+            .permiteDescuento(c.getPermiteDescuento())
+            .activo(c.getActivo())
+            .build();
+    }
+}
+```

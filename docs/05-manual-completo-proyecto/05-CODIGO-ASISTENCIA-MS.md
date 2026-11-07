@@ -3360,3 +3360,65 @@ public class AsistenciaApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### 1. AsistenciaMapper.java
+**Ruta:** `services/asistencia-ms/src/main/java/pe/edu/upeu/eduspace/asistencia/mapper/AsistenciaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.asistencia.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.asistencia.dto.AsistenciaResponse;
+import pe.edu.upeu.eduspace.asistencia.entity.Asistencia;
+
+@Component
+public class AsistenciaMapper {
+
+    public AsistenciaResponse toResponse(Asistencia a) {
+        if (a == null) return null;
+        return AsistenciaResponse.builder()
+            .id(a.getId())
+            .alumnoId(a.getAlumnoId())
+            .seccionId(a.getSeccionId())
+            .fecha(a.getFecha())
+            .estado(a.getEstado())
+            .observacion(a.getObservacion())
+            .registradoPor(a.getRegistradoPor())
+            .creadoEn(a.getCreadoEn())
+            .build();
+    }
+}
+```
+
+### 2. JustificacionMapper.java
+**Ruta:** `services/asistencia-ms/src/main/java/pe/edu/upeu/eduspace/asistencia/mapper/JustificacionMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.asistencia.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.asistencia.dto.JustificacionResponse;
+import pe.edu.upeu.eduspace.asistencia.entity.Justificacion;
+
+@Component
+public class JustificacionMapper {
+
+    public JustificacionResponse toResponse(Justificacion j) {
+        if (j == null) return null;
+        return JustificacionResponse.builder()
+            .id(j.getId())
+            .alumnoId(j.getAlumnoId())
+            .fechaInasistencia(j.getFechaInasistencia())
+            .motivo(j.getMotivo())
+            .estado(j.getEstado())
+            .documentoUrl(j.getDocumentoUrl())
+            .revisadoPor(j.getRevisadoPor())
+            .build();
+    }
+}
+```

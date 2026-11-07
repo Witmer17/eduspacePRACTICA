@@ -3826,3 +3826,95 @@ public class TareasApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### 1. TareaMapper.java
+**Ruta:** `services/tareas-ms/src/main/java/pe/edu/upeu/eduspace/tareas/mapper/TareaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.tareas.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.tareas.dto.TareaResponse;
+import pe.edu.upeu.eduspace.tareas.entity.Tarea;
+
+@Component
+public class TareaMapper {
+
+    public TareaResponse toResponse(Tarea t) {
+        if (t == null) return null;
+        return TareaResponse.builder()
+            .id(t.getId())
+            .cursoId(t.getCursoId())
+            .seccionId(t.getSeccionId())
+            .docenteId(t.getDocenteId())
+            .titulo(t.getTitulo())
+            .descripcion(t.getDescripcion())
+            .fechaPublicacion(t.getFechaPublicacion())
+            .fechaLimite(t.getFechaLimite())
+            .estado(t.getEstado())
+            .puntajeMaximo(t.getPuntajeMaximo())
+            .build();
+    }
+}
+```
+
+### 2. EntregaMapper.java
+**Ruta:** `services/tareas-ms/src/main/java/pe/edu/upeu/eduspace/tareas/mapper/EntregaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.tareas.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.tareas.dto.EntregaResponse;
+import pe.edu.upeu.eduspace.tareas.entity.Entrega;
+
+@Component
+public class EntregaMapper {
+
+    public EntregaResponse toResponse(Entrega e) {
+        if (e == null) return null;
+        return EntregaResponse.builder()
+            .id(e.getId())
+            .tareaId(e.getTarea().getId())
+            .alumnoId(e.getAlumnoId())
+            .archivoUrl(e.getArchivoUrl())
+            .fechaEntrega(e.getFechaEntrega())
+            .calificacion(e.getCalificacion())
+            .retroalimentacion(e.getRetroalimentacion())
+            .estado(e.getEstado())
+            .build();
+    }
+}
+```
+
+### 3. MaterialMapper.java
+**Ruta:** `services/tareas-ms/src/main/java/pe/edu/upeu/eduspace/tareas/mapper/MaterialMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.tareas.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.tareas.dto.MaterialResponse;
+import pe.edu.upeu.eduspace.tareas.entity.Material;
+
+@Component
+public class MaterialMapper {
+
+    public MaterialResponse toResponse(Material m) {
+        if (m == null) return null;
+        return MaterialResponse.builder()
+            .id(m.getId())
+            .cursoId(m.getCursoId())
+            .seccionId(m.getSeccionId())
+            .titulo(m.getTitulo())
+            .archivoUrl(m.getArchivoUrl())
+            .fechaPublicacion(m.getFechaPublicacion())
+            .build();
+    }
+}
+```

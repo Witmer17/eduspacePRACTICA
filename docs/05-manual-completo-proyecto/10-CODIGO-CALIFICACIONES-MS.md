@@ -5678,3 +5678,94 @@ public class CalificacionesApplication {
 
 ---
 
+
+
+---
+
+## 🔄 Capa Mapper (Traductores Entity <-> DTO)
+
+### 1. NotaMapper.java
+**Ruta:** `services/calificaciones-ms/src/main/java/pe/edu/upeu/eduspace/calificaciones/mapper/NotaMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.calificaciones.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.calificaciones.dto.NotaResponse;
+import pe.edu.upeu.eduspace.calificaciones.entity.Nota;
+
+@Component
+public class NotaMapper {
+
+    public NotaResponse toResponse(Nota n) {
+        if (n == null) return null;
+        return NotaResponse.builder()
+            .id(n.getId())
+            .matriculaId(n.getMatriculaId())
+            .cursoId(n.getCursoId())
+            .periodoId(n.getPeriodoId())
+            .criterioId(n.getCriterio().getId())
+            .criterioNombre(n.getCriterio().getNombre())
+            .valor(n.getValor())
+            .docenteId(n.getDocenteId())
+            .fechaRegistro(n.getFechaRegistro())
+            .build();
+    }
+}
+```
+
+### 2. CriterioMapper.java
+**Ruta:** `services/calificaciones-ms/src/main/java/pe/edu/upeu/eduspace/calificaciones/mapper/CriterioMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.calificaciones.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.calificaciones.dto.CriterioResponse;
+import pe.edu.upeu.eduspace.calificaciones.entity.Criterio;
+
+@Component
+public class CriterioMapper {
+
+    public CriterioResponse toResponse(Criterio c) {
+        if (c == null) return null;
+        return CriterioResponse.builder()
+            .id(c.getId())
+            .cursoId(c.getCursoId())
+            .periodoId(c.getPeriodoId())
+            .nombre(c.getNombre())
+            .peso(c.getPeso())
+            .orden(c.getOrden())
+            .build();
+    }
+}
+```
+
+### 3. BoletinMapper.java
+**Ruta:** `services/calificaciones-ms/src/main/java/pe/edu/upeu/eduspace/calificaciones/mapper/BoletinMapper.java`
+
+```java
+package pe.edu.upeu.eduspace.calificaciones.mapper;
+
+import org.springframework.stereotype.Component;
+import pe.edu.upeu.eduspace.calificaciones.dto.BoletinResponse;
+import pe.edu.upeu.eduspace.calificaciones.entity.Boletin;
+
+@Component
+public class BoletinMapper {
+
+    public BoletinResponse toResponse(Boletin b) {
+        if (b == null) return null;
+        return BoletinResponse.builder()
+            .id(b.getId())
+            .matriculaId(b.getMatriculaId())
+            .periodoId(b.getPeriodoId())
+            .anio(b.getAnio())
+            .promedioBimestre(b.getPromedioBimestre())
+            .puesto(b.getPuesto())
+            .estado(b.getEstado())
+            .pdfUrl(b.getPdfUrl())
+            .build();
+    }
+}
+```
