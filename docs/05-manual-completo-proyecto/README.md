@@ -206,14 +206,17 @@ export class AlumnosComponent implements OnInit {
 ### Backend — Orden por Capas (dentro de cada microservicio):
 
 ```
-1. entity/       → Primero: las tablas de la base de datos
-2. repository/   → Segundo: interfaces de acceso a datos
-3. dto/          → Tercero: objetos de entrada/salida de la API
-4. service/      → Cuarto: lógica de negocio y transacciones
-5. controller/   → Quinto: endpoints REST
-6. messaging/    → Sexto: productores y consumidores de Kafka
-7. config/       → Séptimo: configuraciones de Spring
+1. entity/       → Primero: las tablas de la base de datos (PostgreSQL)
+2. repository/   → Segundo: interfaces Spring Data JPA de acceso a datos
+3. dto/          → Tercero: objetos de entrada y salida de la API REST (JSON)
+4. mapper/       → Cuarto: traductores de datos entre Entity y DTO (ver GUIA-MAPPERS.md)
+5. service/      → Quinto: lógica de negocio, validaciones y transacciones
+6. controller/   → Sexto: endpoints REST expuestos al API Gateway
+7. messaging/    → Séptimo: productores y consumidores de eventos Kafka
+8. config/       → Octavo: configuraciones de Spring Boot, seguridad y CORS
 ```
+
+> 📖 **Guía de Mappers:** Para ver el código fuente y cómo programar los mappers de los 10 microservicios, consulta [GUIA-MAPPERS.md](GUIA-MAPPERS.md).
 
 ### Backend — Orden por Microservicio (los que dependen de otros van después):
 
